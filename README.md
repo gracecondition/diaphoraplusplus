@@ -1,7 +1,7 @@
 # δiaphora++
 
 <p align='center'>
-<img src="https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/logo/logo.png" width="40%">
+<img src="https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/images/logo.png" width="40%">
 </p>
 
 Diaphora++ is a fork of Diaphora, the best IDA plugin for diffing binaries.
@@ -55,24 +55,6 @@ You can help (or thank) the author of Diaphora by making a donation. If you feel
 
  * [![Liberapay](https://img.shields.io/liberapay/receives/diaphora.svg?logo=liberapay)](https://liberapay.com/Diaphora/donate)
  * [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&amp;hosted_button_id=68Z4H8SE7N64L)
-
-## Support
-
-Feel free to open issues in Github if you have any problem or need help. If you prefer to chat interactivelly, you can use the following Discord channel: https://discord.gg/atg34w2xjV
-
-## Licensing
-
-Versions of Diaphora prior to 1.2.4, including version 1.2.4, were licensed under the [GNU GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html). Since version 2.0, Diaphora is now licensed under the [GNU Affero GPL version 3 license](https://www.gnu.org/licenses/agpl-3.0.html). The license has been changed so companies wanting to modify and adapt Diaphora cannot offer web services based on these modified versions without contributing back the changes.
-
-For 99.99% of users, the license change doesn't affect them at all. If your company needs a different licensing model, check the next section...
-
-## Commercial Support and Consultancy
-
-Commercial support and consultancy is offered for legal companies. If you need support or consultancy for problems you have with your target, to develop products based on Diaphora, to use Diaphora internally interacting with your own tools, for plagiarism detection projects, etc... you can contact me at admin@joxeankoret.com for more details.
-
-## Licensing problems
-
-If your company does not allow using the AGPL license, you can get commercial licenses of Diaphora to use it in your company, or to use it as a particular in any company you work (similar concept as IDA's named licenses). For more details, please contact me at admin@joxeankoret.com.
 
 ## Wiki
 
