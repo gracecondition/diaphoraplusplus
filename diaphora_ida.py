@@ -1607,6 +1607,7 @@ class CIDABinDiff(diaphora.CBinDiff):
 
           style = fmt.get_style_defs('.highlight')
           style += "\n.m { color: #ffffff !important; }"
+          style += "\ntd.linenos .normal, span.linenos { color: #ffffff !important; }"
           html_body = highlight(buf, DiffLexer(), fmt)
           src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         else:
@@ -1700,6 +1701,7 @@ class CIDABinDiff(diaphora.CBinDiff):
         final_asm = f'; {row["prototype"]}\n{row["name"]} proc near\n{asm}\n{row["name"]} endp\n'
         style = fmt.get_style_defs('.highlight')
         style += "\n.m { color: #ffffff !important; }"
+        style += "\ntd.linenos .normal, span.linenos { color: #ffffff !important; }"
         html_body = highlight(final_asm, NasmLexer(), fmt)
         src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         title = f'Assembly for {row["name"]}'
@@ -1731,6 +1733,7 @@ class CIDABinDiff(diaphora.CBinDiff):
         func = f'{row["prototype"]}\n{row["pseudocode"]}'
         style = fmt.get_style_defs('.highlight')
         style += "\n.m { color: #ffffff !important; }"
+        style += "\ntd.linenos .normal, span.linenos { color: #ffffff !important; }"
         html_body = highlight(func, CppLexer(), fmt)
         src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         title = f'Pseudo-code for {row["name"]}'
@@ -1804,6 +1807,7 @@ class CIDABinDiff(diaphora.CBinDiff):
       buf = "\n".join([line.rstrip("\n") for line in uni_diff])
       style = fmt.get_style_defs('.highlight')
       style += "\n.m { color: #ffffff !important; }"
+      style += "\ntd.linenos .normal, span.linenos { color: #ffffff !important; }"
       html_body = highlight(buf, DiffLexer(), fmt)
       src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
     else:
@@ -4072,6 +4076,7 @@ class CHtmlDiff:
 
     pygments_style = fmt.get_style_defs('.highlight')
     pygments_style += "\n.m { color: #ffffff !important; }"
+    pygments_style += "\ntd.linenos .normal, span.linenos { color: #ffffff !important; }"
     full_style = self._style + "\n" + pygments_style
     res = self._html_template % {"style": full_style, "rows": all_the_rows}
     return res
