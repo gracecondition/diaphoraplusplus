@@ -62,47 +62,18 @@ If you are looking to how to automate the export or diffing process, or you want
 
 ## Screenshots
 
-Diaphora finding the exact function where a vulnerability was patched in CVE-2020-1350:
+Diaphora++ finding the exact function where a vulnerability was patched in CVE-2025-43200:
 
-![CVE-2020-1350](https://files.mastodon.social/media_attachments/files/110/313/141/968/158/099/original/607189c509ec1cc4.png)
+![CVE-2025-43200](https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/images/screenshot1.png)
 
-Diaphora, again, finding the exact function where CVE-2023-28231 was fixed:
+Diaphora++, diffing the pseudocode part of the patch:
 
-![CVE-2023-28231](https://files.mastodon.social/media_attachments/files/110/313/148/945/529/051/original/28e032f21be414a3.png)
+![CVE-2025-43200](https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/images/screenshot2.png)
 
-CVE-2023-28231. As explained in a blog from ZDI, the vulnerability was fixed by checking that the number of relay forward messages in "ProcessRelayForwardMessage()" is not bigger or equal than 32 (0x20), as shown in the following pseudo-code diffing:
+Diaphora++, diffing another part of the patch:
 
-![CVE-2023-28231](https://files.mastodon.social/media_attachments/files/110/300/368/934/189/808/original/fe3392db2b8234e9.png)
+![CVE-2025-43200](https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/images/screenshot4.png)
 
-Diaphora doing Hex-Ray's microcode diffing:
+Diaphora++, assembly diffing view
 
-![Diffing microcode in a graph](https://files.mastodon.social/media_attachments/files/110/157/157/910/926/533/original/6c5975e15c378cb5.png)
-
-Diffing assembly, pseudo-code and microcode:
-
-![Assembly, pseudo-code and microcode](https://files.mastodon.social/media_attachments/files/110/102/237/646/074/440/original/4a816df5069691c3.png)
-
-Diffing CVE-2023-21768 with Diaphora 3.0:
-
-![Diffing CVE-2023-21768 with #Diaphora 3.0](https://files.mastodon.social/media_attachments/files/110/066/930/153/215/408/original/86b06ae90d57d5a1.png)
-
-This is a screenshot of Diaphora diffing the PEGASUS iOS kernel Vulnerability fixed in iOS 9.3.5:
-
-![Diffing iOS 9.3.5 diff](http://sektioneins.de/images/diaphora1.png)
-
-And this is an old screenshot of Diaphora diffing the [Microsoft bulletin MS15-034](https://technet.microsoft.com/en-us/library/security/ms15-034.aspx):
-
-![Diaphora diffing MS15-034](https://pbs.twimg.com/media/CCnruP_W0AA8ksc.png:large)
-
-These are some screenshots of Diaphora diffing the [Microsoft bulletin MS15-050]( https://technet.microsoft.com/en-us/library/security/ms15-050.aspx), extracted from the blog post [Analyzing MS15-050 With Diaphora](http://www.alex-ionescu.com/?p=271) from Alex Ionescu.
-
-![Diaphora diffing MS15-050, best matches](http://www.alex-ionescu.com/wp-content/uploads/diaphora2.png)
-![Diaphora diffing MS15-050, partial matches](http://www.alex-ionescu.com/wp-content/uploads/diaphora3.png)
-![Diaphora diffing MS15-050, diffing pseudo-code](http://www.alex-ionescu.com/wp-content/uploads/diaphora1.png)
-
-![Diaphora diffing a LuaBot, matches and pseudo-code](https://1.bp.blogspot.com/-O5UjSOyjCgg/V5byA-ozXVI/AAAAAAAABaY/yRTMDTSD9zI0mSy4AsHN21ZYf_YvctnkwCLcB/s1600/evs-compile.png)
-
-
-Here is a screenshot of Diaphora diffing [iBoot from iOS 10.3.3 against iOS 11.0](https://blog.matteyeux.com/hacking/2018/04/04/diaphora-diff-and-ida.html):
-
-![Diaphora diffing iBoot from iOS 10.3.3 against iOS 11.0](https://blog.matteyeux.com/images/newgraph.PNG)
+![CVE-2025-43200](https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/images/screenshot3.png)
