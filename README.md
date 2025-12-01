@@ -36,7 +36,9 @@ However, Diaphora has also many features that are unique, not available in any o
 ## Diaphora++ improvements
 - Heap size increases to alleviate SQLite reading bottleneck
 - SQLite query modifications to increase speed
-- UI Improvements (Searching in diff view, export as .diff)
+- .diff export of function
+- Better UI colors for dark mode
+- Search within diff in IDA.
 
 ## Installation
 
