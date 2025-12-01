@@ -246,7 +246,7 @@ def _make_formatter(with_linenos=False):
   Centralized formatter with a dark-friendly palette.
   """
   return HtmlFormatter(
-    style="monokai", noclasses=True, linenos=with_linenos, nobackground=False
+    style="monokai", noclasses=False, linenos=with_linenos, nobackground=False
   )
 
 
@@ -860,7 +860,7 @@ class CIDAChooser(CDiaphoraChooser):
         # pylint: disable-next=consider-using-f-string
         color = int("0x%02x%02x%02x" % (blue, green, red), 16)
       return [color, 0]
-    return [0xFFFFFF, 0]
+    return [0x222222, 0]
 
 
 #-------------------------------------------------------------------------------
@@ -1605,7 +1605,10 @@ class CIDABinDiff(diaphora.CBinDiff):
           tmp = tmp[2:]
           buf = "\n".join(tmp)
 
-          src = highlight(buf, DiffLexer(), fmt)
+          style = fmt.get_style_defs('.highlight')
+          style += "\n.m { color: #ffffff !important; }"
+          html_body = highlight(buf, DiffLexer(), fmt)
+          src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         else:
           src = html_diff.make_file(
             buf1.split("\n"), buf2.split("\n"), fmt, NasmLexer()
@@ -1695,9 +1698,12 @@ class CIDABinDiff(diaphora.CBinDiff):
         fmt = _make_formatter(with_linenos=True)
         asm = self.prettify_asm(row["assembly"])
         final_asm = f'; {row["prototype"]}\n{row["name"]} proc near\n{asm}\n{row["name"]} endp\n'
-        src = highlight(final_asm, NasmLexer(), fmt)
+        style = fmt.get_style_defs('.highlight')
+        style += "\n.m { color: #ffffff !important; }"
+        html_body = highlight(final_asm, NasmLexer(), fmt)
+        src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         title = f'Assembly for {row["name"]}'
-        cdiffer = CHtmlViewer()
+        cdiffer = CDiffSearchForm()
         cdiffer.Show(src, title)
     finally:
       cur.close()
@@ -1723,9 +1729,12 @@ class CIDABinDiff(diaphora.CBinDiff):
       else:
         fmt = _make_formatter(with_linenos=True)
         func = f'{row["prototype"]}\n{row["pseudocode"]}'
-        src = highlight(func, CppLexer(), fmt)
+        style = fmt.get_style_defs('.highlight')
+        style += "\n.m { color: #ffffff !important; }"
+        html_body = highlight(func, CppLexer(), fmt)
+        src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
         title = f'Pseudo-code for {row["name"]}'
-        cdiffer = CHtmlViewer()
+        cdiffer = CDiffSearchForm()
         cdiffer.Show(src, title)
     finally:
       cur.close()
@@ -1787,16 +1796,16 @@ class CIDABinDiff(diaphora.CBinDiff):
     (buf1, buf2, row1, row2) = buffers
 
     html_diff = CHtmlDiff()
-    fmt = HtmlFormatter()
-    fmt.noclasses = True
-    fmt.linenos = False
-    fmt.nobackground = True
+    fmt = _make_formatter(with_linenos=False)
     if not html:
       uni_diff = difflib.unified_diff(
         buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
       )
       buf = "\n".join([line.rstrip("\n") for line in uni_diff])
-      src = highlight(buf, DiffLexer(), fmt)
+      style = fmt.get_style_defs('.highlight')
+      style += "\n.m { color: #ffffff !important; }"
+      html_body = highlight(buf, DiffLexer(), fmt)
+      src = f"<html><head><style>{style}</style></head><body>{html_body}</body></html>"
     else:
       src = html_diff.make_file(buf1.split("\n"), buf2.split("\n"), fmt, CppLexer())
 
@@ -4061,7 +4070,10 @@ class CHtmlDiff:
       .replace("\t", 4 * "&nbsp;")
     )
 
-    res = self._html_template % {"style": self._style, "rows": all_the_rows}
+    pygments_style = fmt.get_style_defs('.highlight')
+    pygments_style += "\n.m { color: #ffffff !important; }"
+    full_style = self._style + "\n" + pygments_style
+    res = self._html_template % {"style": full_style, "rows": all_the_rows}
     return res
 
   def _stop_wasting_space(self, s):

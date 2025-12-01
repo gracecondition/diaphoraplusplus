@@ -68,7 +68,7 @@ class MonokaiStyle(Style):
         Name.Variable.Global:      "",        # class: 'vg' - to be revised
         Name.Variable.Instance:    "",        # class: 'vi' - to be revised
 
-        Number:                    "#ae81ff", # class: 'm'
+        Number:                    "#FF0000", # class: 'm'
         Number.Float:              "",        # class: 'mf'
         Number.Hex:                "",        # class: 'mh'
         Number.Integer:            "",        # class: 'mi'
