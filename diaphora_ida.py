@@ -240,6 +240,17 @@ def get_string_at(ea):
 
 
 #-------------------------------------------------------------------------------
+# Shared formatter for dark-themed diffs
+def _make_formatter(with_linenos=False):
+  """
+  Centralized formatter with a dark-friendly palette.
+  """
+  return HtmlFormatter(
+    style="monokai", noclasses=True, linenos=with_linenos, nobackground=False
+  )
+
+
+#-------------------------------------------------------------------------------
 # pylint: disable=redefined-outer-name
 # pylint: disable=arguments-renamed
 # pylint: disable=attribute-defined-outside-init
@@ -299,7 +310,7 @@ class CHtmlViewer(PluginForm):
     return PluginForm.Show(self, title)
 
 
-class CPseudoDiffForm(PluginForm):
+class CDiffSearchForm(PluginForm):
   """
   HTML pseudo diff viewer with a small search bar using QTextBrowser.
   Highlights all matches and lets the user jump next/prev.
@@ -1585,10 +1596,7 @@ class CIDABinDiff(diaphora.CBinDiff):
         buf1 = f'{row1["name"]} proc near\n{asm1}\n{row1["name"]} endp'
         buf2 = f'{row2["name"]} proc near\n{asm2}\n{row2["name"]} endp'
 
-        fmt = HtmlFormatter()
-        fmt.noclasses = True
-        fmt.linenos = False
-        fmt.nobackground = True
+        fmt = _make_formatter(with_linenos=False)
         if not html:
           uni_diff = difflib.unified_diff(buf1.split("\n"), buf2.split("\n"))
           tmp = []
@@ -1624,14 +1632,14 @@ class CIDABinDiff(diaphora.CBinDiff):
     res = self.generate_asm_diff(item[1], item[3], html=html, error_func=warning)
     if res:
       (src, title) = res
-      cdiffer = CHtmlViewer()
+      cdiffer = CDiffSearchForm()
       cdiffer.Show(src, title)
 
   def show_microcode_diff(self, item):
     res = self.generate_microcode_diff(item[1], item[3], error_func=warning)
     if res:
       (src, title) = res
-      cdiffer = CHtmlViewer()
+      cdiffer = CDiffSearchForm()
       cdiffer.Show(src, title)
 
   def save_asm_diff(self, ea1, ea2, filename):
@@ -1684,9 +1692,7 @@ class CIDABinDiff(diaphora.CBinDiff):
           "Sorry, there is no assembly available for the selected function."
         )
       else:
-        fmt = HtmlFormatter()
-        fmt.noclasses = True
-        fmt.linenos = True
+        fmt = _make_formatter(with_linenos=True)
         asm = self.prettify_asm(row["assembly"])
         final_asm = f'; {row["prototype"]}\n{row["name"]} proc near\n{asm}\n{row["name"]} endp\n'
         src = highlight(final_asm, NasmLexer(), fmt)
@@ -1715,9 +1721,7 @@ class CIDABinDiff(diaphora.CBinDiff):
           "Sorry, there is no pseudo-code available for the selected function."
         )
       else:
-        fmt = HtmlFormatter()
-        fmt.noclasses = True
-        fmt.linenos = True
+        fmt = _make_formatter(with_linenos=True)
         func = f'{row["prototype"]}\n{row["pseudocode"]}'
         src = highlight(func, CppLexer(), fmt)
         title = f'Pseudo-code for {row["name"]}'
@@ -1813,7 +1817,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     res = self.generate_pseudo_diff(item[1], item[3], html=html, error_func=warning)
     if res:
       (src, title) = res
-      cdiffer = CPseudoDiffForm()
+      cdiffer = CDiffSearchForm()
       cdiffer.Show(src, title)
 
   def save_pseudo_diff(self, ea1, ea2, filename):
