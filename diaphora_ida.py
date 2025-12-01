@@ -70,7 +70,7 @@ except ImportError:
   HAS_GET_SOURCE_STRINGS = False
 
 # pylint: disable-next=wrong-import-order
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtGui, QtCore
 
 #-------------------------------------------------------------------------------
 # Chooser items indices. They do differ from the CChooser.item items that are
@@ -258,18 +258,159 @@ class CHtmlViewer(PluginForm):
     return 1
 
   def PopulateForm(self):
+    self.search_box = QtWidgets.QLineEdit()
+    self.search_box.setPlaceholderText("Search (Enter / Next / Prev)")
+
+    btn_find = QtWidgets.QPushButton("Find")
+    btn_next = QtWidgets.QPushButton("Next")
+    btn_prev = QtWidgets.QPushButton("Prev")
+
     self.layout = QtWidgets.QVBoxLayout()
+    hlayout = QtWidgets.QHBoxLayout()
+    hlayout.addWidget(self.search_box)
+    hlayout.addWidget(btn_find)
+    hlayout.addWidget(btn_next)
+    hlayout.addWidget(btn_prev)
+
     self.browser = QtWidgets.QTextBrowser()
     self.browser.setLineWrapMode(QtWidgets.QTextEdit.FixedColumnWidth)
     self.browser.setLineWrapColumnOrWidth(150)
     self.browser.setHtml(self.text)
     self.browser.setReadOnly(True)
+    self.browser.setTextInteractionFlags(
+      QtCore.Qt.TextSelectableByMouse
+      | QtCore.Qt.TextSelectableByKeyboard
+      | QtCore.Qt.LinksAccessibleByMouse
+    )
+
+    btn_find.clicked.connect(lambda: self.do_search(True, restart=True))
+    btn_next.clicked.connect(lambda: self.do_search(True, restart=False))
+    btn_prev.clicked.connect(lambda: self.do_search(False, restart=False))
+    self.search_box.returnPressed.connect(
+      lambda: self.do_search(True, restart=False)
+    )
+
+    self.layout.addLayout(hlayout)
     self.layout.addWidget(self.browser)
     self.parent.setLayout(self.layout)
 
   def Show(self, text, title):
     self.text = text
     return PluginForm.Show(self, title)
+
+
+class CPseudoDiffForm(PluginForm):
+  """
+  HTML pseudo diff viewer with a small search bar using QTextBrowser.
+  Highlights all matches and lets the user jump next/prev.
+  """
+
+  def __init__(self):
+    super().__init__()
+    self.text = None
+    self.matches = []
+    self.cur_idx = -1
+    self._last_query = ""
+    self.color_all = QtGui.QColor("#ffd166")
+    self.color_current = QtGui.QColor("#ff9f1c")
+
+  def OnCreate(self, form):
+    self.parent = self.FormToPyQtWidget(form)
+    self.populate()
+    return 1
+
+  def populate(self):
+    self.search_box = QtWidgets.QLineEdit()
+    self.search_box.setPlaceholderText("Search (Enter / Next / Prev)")
+
+    btn_find = QtWidgets.QPushButton("Find")
+    btn_next = QtWidgets.QPushButton("Next")
+    btn_prev = QtWidgets.QPushButton("Prev")
+
+    btn_find.clicked.connect(lambda: self.do_search(True, restart=True))
+    btn_next.clicked.connect(lambda: self.do_search(True, restart=False))
+    btn_prev.clicked.connect(lambda: self.do_search(False, restart=False))
+    self.search_box.returnPressed.connect(
+      lambda: self.do_search(True, restart=True)
+    )
+
+    hlayout = QtWidgets.QHBoxLayout()
+    hlayout.addWidget(self.search_box)
+    hlayout.addWidget(btn_find)
+    hlayout.addWidget(btn_next)
+    hlayout.addWidget(btn_prev)
+
+    self.layout = QtWidgets.QVBoxLayout()
+    self.layout.addLayout(hlayout)
+
+    self.view = QtWidgets.QTextBrowser()
+    self.view.setLineWrapMode(QtWidgets.QTextEdit.FixedColumnWidth)
+    self.view.setLineWrapColumnOrWidth(150)
+    self.view.setHtml(self.text or "")
+    self.view.setReadOnly(True)
+    self.view.setTextInteractionFlags(
+      QtCore.Qt.TextSelectableByMouse
+      | QtCore.Qt.TextSelectableByKeyboard
+      | QtCore.Qt.LinksAccessibleByMouse
+    )
+
+    self.layout.addWidget(self.view)
+    self.parent.setLayout(self.layout)
+
+  def Show(self, text, title):
+    self.text = text
+    return PluginForm.Show(self, title)
+
+  def _collect_matches(self, query):
+    doc = self.view.document()
+    flags = QtGui.QTextDocument.FindFlags()
+    cur = QtGui.QTextCursor(doc)
+    matches = []
+    while True:
+      cur = doc.find(query, cur, flags)
+      if cur.isNull():
+        break
+      matches.append(QtGui.QTextCursor(cur))
+      cur.setPosition(cur.selectionEnd())
+    return matches
+
+  def _apply_highlights(self):
+    extras = []
+    for idx, cur in enumerate(self.matches):
+      sel = QtWidgets.QTextEdit.ExtraSelection()
+      fmt = QtGui.QTextCharFormat()
+      fmt.setBackground(self.color_current if idx == self.cur_idx else self.color_all)
+      sel.format = fmt
+      sel.cursor = cur
+      extras.append(sel)
+    self.view.setExtraSelections(extras)
+
+  def do_search(self, forward=True, restart=False):
+    query = self.search_box.text()
+    if not query:
+      self.matches = []
+      self.cur_idx = -1
+      self.view.setExtraSelections([])
+      return
+
+    if restart or query != self._last_query or not self.matches:
+      self.matches = self._collect_matches(query)
+      self.cur_idx = 0 if self.matches else -1
+      self._last_query = query
+    else:
+      if not self.matches:
+        return
+      step = 1 if forward else -1
+      self.cur_idx = (self.cur_idx + step) % len(self.matches)
+
+    if not self.matches:
+      self.view.setExtraSelections([])
+      return
+
+    self._apply_highlights()
+    cur = self.matches[self.cur_idx]
+    self.view.setTextCursor(cur)
+    self.view.ensureCursorVisible()
 
 
 # pylint: enable=c-extension-no-member
@@ -450,6 +591,7 @@ class CIDAChooser(CDiaphoraChooser):
       self.cmd_diff_asm = self.AddCommand("Diff assembly")
       self.cmd_diff_microcode = self.AddCommand("Diff microcode")
       self.cmd_diff_c = self.AddCommand("Diff pseudo-code")
+      self.cmd_save_diff_c = self.AddCommand("Export pseudo-code diff (.diff)")
       self.cmd_diff_graph = self.AddCommand("Diff assembly in a graph")
       self.cmd_diff_graph_microcode = self.AddCommand("Diff microcode in a graph")
       self.cmd_diff_external = self.AddCommand("Diff using an external tool")
@@ -521,6 +663,14 @@ class CIDAChooser(CDiaphoraChooser):
       self.bindiff.show_pseudo_diff(self.items[n])
     elif cmd_id == self.cmd_diff_c_patch:
       self.bindiff.show_pseudo_diff(self.items[n], html=False)
+    elif cmd_id == self.cmd_save_diff_c:
+      filename = ask_file(
+        True, "*.diff", "Save pseudo-code diff for external editor"
+      )
+      if filename:
+        ea1 = self.items[n][CHOOSER_ITEM_MAIN_EA]
+        ea2 = self.items[n][CHOOSER_ITEM_DIFF_EA]
+        self.bindiff.save_pseudo_diff_text(ea1, ea2, filename)
     elif cmd_id == self.cmd_diff_asm_patch:
       self.bindiff.show_asm_diff(self.items[n], html=False)
     elif cmd_id == self.cmd_diff_asm:
@@ -1576,7 +1726,10 @@ class CIDABinDiff(diaphora.CBinDiff):
     finally:
       cur.close()
 
-  def generate_pseudo_diff(self, ea1, ea2, html=True, error_func=log):
+  def _get_pseudo_buffers(self, ea1, ea2, error_func=None):
+    if error_func is None:
+      error_func = error
+
     cur = self.db_cursor()
     try:
       sql = """select *
@@ -1591,70 +1744,94 @@ class CIDABinDiff(diaphora.CBinDiff):
         where address = ?
           and pseudocode is not null)
         order by 4 asc"""
-      ea1 = str(int(ea1, 16))
-      ea2 = str(int(ea2, 16))
-      cur.execute(sql, (ea1, ea2))
+      ea1_int = str(int(ea1, 16))
+      ea2_int = str(int(ea2, 16))
+      cur.execute(sql, (ea1_int, ea2_int))
       rows = cur.fetchall()
-      res = None
       if len(rows) != 2:
         error_func(
           "Sorry, there is no pseudo-code available for either the first or the second database."
         )
+        return None
+
+      row1 = rows[0]
+      row2 = rows[1]
+
+      proto1 = self.decompile_and_get(int(ea1_int))
+      if proto1:
+        buf1 = proto1 + "\n" + "\n".join(self.pseudo[int(ea1_int)])
       else:
-        row1 = rows[0]
-        row2 = rows[1]
+        log(
+          "warning: cannot retrieve the current pseudo-code for the function, using the previously saved one..."
+        )
+        buf1 = row1["prototype"] + "\n" + row1["pseudocode"]
+      buf2 = row2["prototype"] + "\n" + row2["pseudocode"]
 
-        html_diff = CHtmlDiff()
-        proto1 = self.decompile_and_get(int(ea1))
-        if proto1:
-          buf1 = proto1 + "\n" + "\n".join(self.pseudo[int(ea1)])
-        else:
-          log(
-            "warning: cannot retrieve the current pseudo-code for the function, using the previously saved one..."
-          )
-          buf1 = row1["prototype"] + "\n" + row1["pseudocode"]
-        buf2 = row2["prototype"] + "\n" + row2["pseudocode"]
+      if buf1 == buf2:
+        error_func("Both pseudo-codes are equal.")
+        return None
 
-        if buf1 == buf2:
-          error_func("Both pseudo-codes are equal.")
-
-        fmt = HtmlFormatter()
-        fmt.noclasses = True
-        fmt.linenos = False
-        fmt.nobackground = True
-        if not html:
-          uni_diff = difflib.unified_diff(buf1.split("\n"), buf2.split("\n"))
-          tmp = []
-          for line in uni_diff:
-            tmp.append(line.strip("\n"))
-          tmp = tmp[2:]
-          buf = "\n".join(tmp)
-
-          src = highlight(buf, DiffLexer(), fmt)
-        else:
-          src = html_diff.make_file(
-            buf1.split("\n"), buf2.split("\n"), fmt, CppLexer()
-          )
-
-        title = f'Diff pseudo-code {row1["name"]} - {row2["name"]}'
-        res = (src, title)
+      return (buf1, buf2, row1, row2)
     finally:
       cur.close()
-    return res
+
+  def generate_pseudo_diff(self, ea1, ea2, html=True, error_func=log):
+    buffers = self._get_pseudo_buffers(ea1, ea2, error_func=error_func)
+    if not buffers:
+      return None
+
+    (buf1, buf2, row1, row2) = buffers
+
+    html_diff = CHtmlDiff()
+    fmt = HtmlFormatter()
+    fmt.noclasses = True
+    fmt.linenos = False
+    fmt.nobackground = True
+    if not html:
+      uni_diff = difflib.unified_diff(
+        buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
+      )
+      buf = "\n".join([line.rstrip("\n") for line in uni_diff])
+      src = highlight(buf, DiffLexer(), fmt)
+    else:
+      src = html_diff.make_file(buf1.split("\n"), buf2.split("\n"), fmt, CppLexer())
+
+    title = f'Diff pseudo-code {row1["name"]} - {row2["name"]}'
+    return (src, title)
+
+  def generate_pseudo_diff_text(self, ea1, ea2, error_func=log):
+    buffers = self._get_pseudo_buffers(ea1, ea2, error_func=error_func)
+    if not buffers:
+      return None
+    (buf1, buf2, row1, row2) = buffers
+    uni_diff = difflib.unified_diff(
+      buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
+    )
+    return "\n".join([line.rstrip("\n") for line in uni_diff])
 
   def show_pseudo_diff(self, item, html=True):
     res = self.generate_pseudo_diff(item[1], item[3], html=html, error_func=warning)
     if res:
       (src, title) = res
-      cdiffer = CHtmlViewer()
+      cdiffer = CPseudoDiffForm()
       cdiffer.Show(src, title)
 
   def save_pseudo_diff(self, ea1, ea2, filename):
-    res = self.generate_pseudo_diff(ea1, ea2, html=True)
+    res = self.generate_pseudo_diff(ea1, ea2, html=True, error_func=warning)
     if res:
       (src, _) = res
       with open(filename, "w", encoding="utf8") as f:
         f.write(src)
+
+  def save_pseudo_diff_text(self, ea1, ea2, filename):
+    """
+    Export a unified .diff file for inspection in an external editor.
+    """
+    diff_text = self.generate_pseudo_diff_text(ea1, ea2, error_func=warning)
+    if diff_text is None:
+      return
+    with open(filename, "w", encoding="utf8") as f:
+      f.write(diff_text)
 
   def diff_external(self, item):
     cmd_line = None
@@ -1682,6 +1859,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     else:
       ret = self.diff_external_pseudo(item, cmd_line)
     print("External command returned", ret)
+
 
   def diff_external_asm(self, item, cmd_line):
     ret = None
