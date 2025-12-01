@@ -1,13 +1,12 @@
-# δiaphora
+# δiaphora++
 
 <p align='center'>
-<img src="https://github.com/joxeankoret/diaphora/assets/2945834/3f1e9cf4-98d7-4d9a-b7d3-0a7354053b4e" width="10%">
+<img src="https://raw.githubusercontent.com/gracecondition/diaphoraplusplus/refs/heads/master/logo/logo.png" width="40%">
 </p>
 
-Diaphora (διαφορά, Greek for 'difference') version 3.1.2 is the most advanced program diffing tool (working as an IDA plugin) available as of today (2024). It was released first during SyScan 2015 and has been actively maintained ever since: Diaphora has been ported to every single minor version of IDA since 6.8 to 8.4.
-
-Diaphora supports versions of IDA >= 7.4 because the code only runs in Python 3.X (Python 3.11 was the last version being tested).
-
+Diaphora++ is a fork of Diaphora, the best IDA plugin for diffing binaries.
+Since 2024 Diaphora has not recieved any updates, and I found that it was lacking some featuers, so I took it upon myself
+to fork the project and add more stuff.
 ## Unique Features
 
 Diaphora has many of the most common program diffing (bindiffing) features you might expect, like:
@@ -33,6 +32,11 @@ However, Diaphora has also many features that are unique, not available in any o
  * Diffing pseudo-codes (with syntax highlighting!).
  * Scripting support (for both the exporting and diffing processes).
  * ...
+
+## Diaphora++ improvements
+- Heap size increases to alleviate SQLite reading bottleneck
+- SQLite query modifications to increase speed
+- UI Improvements (Searching in diff view, export as .diff)
 
 ## Installation
 
