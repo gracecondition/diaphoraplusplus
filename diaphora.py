@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import time
-import json
+import orjson as json
 import decimal
 import sqlite3
 import logging
@@ -306,15 +306,13 @@ class CChooser:
 
 
 #-------------------------------------------------------------------------------
-class CBytesEncoder(json.JSONEncoder):
+def cbytes_default(o):
   """
-  Class used to JSON encode some Python types that aren't supported by default.
+  Default JSON serializer for orjson, handling bytes.
   """
-
-  def default(self, o):
-    if isinstance(o, bytes):
-      return o.decode("utf-8")
-    return json.JSONEncoder.default(self, o)
+  if isinstance(o, bytes):
+    return o.decode("utf-8", "replace")
+  raise TypeError
 
 
 #-------------------------------------------------------------------------------
@@ -745,11 +743,7 @@ class CBinDiff:
         for instruction_property in instruction:
           if isinstance(instruction_property, (list, set)):
             instruction_properties.append(
-              json.dumps(
-                list(instruction_property),
-                ensure_ascii=False,
-                cls=CBytesEncoder,
-              )
+              json.dumps(list(instruction_property), default=cbytes_default).decode("utf-8")
             )
           elif isinstance(instruction_property, int):
             if instruction_property > 0x8000000000000000:
@@ -1107,7 +1101,7 @@ class CBinDiff:
 
         if isinstance(prop, (list, set)):
           new_props.append(
-            json.dumps(list(prop), ensure_ascii=False, cls=CBytesEncoder)
+            json.dumps(list(prop), default=cbytes_default).decode("utf-8")
           )
         else:
           new_props.append(prop)

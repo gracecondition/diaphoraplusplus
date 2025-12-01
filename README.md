@@ -34,8 +34,10 @@ However, Diaphora has also many features that are unique, not available in any o
  * ...
 
 ## Diaphora++ improvements
+- Significant diffing speed improvements (5x speed)
 - Heap size increases to alleviate SQLite reading bottleneck
 - SQLite query modifications to increase speed
+- orjson for faster json handling
 - .diff export of function
 - Better UI colors for dark mode
 - Search within diff in IDA.

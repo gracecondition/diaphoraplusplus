@@ -136,7 +136,7 @@ def _print_list(what):
 
 
 def _print_list_as_json(requested_items):
-    import json
+    import orjson as json
     result = {}
     if 'lexer' in requested_items:
         info = {}
@@ -177,7 +177,7 @@ def _print_list_as_json(requested_items):
             }
         result['styles'] = info
 
-    json.dump(result, sys.stdout)
+    sys.stdout.write(json.dumps(result).decode('utf-8'))
 
 def main_inner(parser, argns):
     if argns.help:

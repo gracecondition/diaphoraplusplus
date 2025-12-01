@@ -2,7 +2,7 @@
 
 __all__ = ["get_model_comparison_data", "ML_AVAILABLE"]
 
-import json
+import orjson as json
 
 from collections import OrderedDict
 

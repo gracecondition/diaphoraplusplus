@@ -17,7 +17,7 @@
 # HAVE A NICE DAY.
 
 import basicutils_7x as basicutils
-import json
+import orjson as json
 import os
 try:
   import modnaming
@@ -29,7 +29,7 @@ except ImportError:
 #escape_for_graphviz()
 #Return the string escaped for usage in a GraphViz file
 def escape_for_graphviz(string):
-    return json.dumps(string)
+    return json.dumps(string).decode('utf-8')
 
 ## CodeCut Basics
 ## A couple of functions for working with function and module lists and outputting results

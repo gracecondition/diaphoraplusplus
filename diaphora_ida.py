@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import os
 import sys
 import time
-import json
+import orjson as json
 import decimal
 import difflib
 import sqlite3
@@ -1404,7 +1404,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     self.commit_and_start_transaction()
     md5sum = GetInputFileMD5()
     self.save_callgraph(
-      str(callgraph_primes), json.dumps(callgraph_all_primes), md5sum
+      str(callgraph_primes), json.dumps(callgraph_all_primes).decode('utf-8'), md5sum
     )
     self.export_structures()
     try:
