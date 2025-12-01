@@ -334,12 +334,33 @@ if len(_DATABASES) > 0:
 
 def sqlite3_connect(db_name):
   """
-  Return a SQL connection object.
+  Return a SQL connection object with performance optimizations.
+
+  NOTE: All PRAGMAs here are connection-level settings that do NOT modify
+  the database file format, ensuring full compatibility with original Diaphora.
   """
   global _DATABASES
   db = sqlite3.connect(db_name, check_same_thread=False)
   db.text_factory = str
   db.row_factory = sqlite3.Row
+
+  # Performance optimizations (connection-level only, no schema changes)
+  cur = db.cursor()
+  try:
+    # Large cache: 128MB instead of default ~2MB (RAM only, no file changes)
+    cur.execute("PRAGMA cache_size = -131072")
+
+    # Keep temp tables in memory (no file changes)
+    cur.execute("PRAGMA temp_store = MEMORY")
+
+    # Memory-map 512MB of database for faster reads (no file changes)
+    cur.execute("PRAGMA mmap_size = 536870912")
+
+    # Faster synchronous mode (safe for read-heavy diffing, no schema changes)
+    cur.execute("PRAGMA synchronous = NORMAL")
+  finally:
+    cur.close()
+
   _DATABASES[db_name] = db
   return db
 

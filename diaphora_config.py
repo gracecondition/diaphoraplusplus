@@ -17,28 +17,32 @@ CONFIGURATION_DIRECTORY = os.path.dirname(CONFIGURATION_FILE_PATH)
 
 # Colors for the call graph viewer nodes.
 # NOTE: Colors are specified in the format 0xBGR instead of RGB.
-CALLGRAPH_COLOR_TARGET = 0xEEFF00
-CALLGRAPH_COLOR_CALLER = 0xFFFFFF
-CALLGRAPH_COLOR_CALLEE = 0xFFFFFF
+# Dark mode palette (readable on dark backgrounds)
+CALLGRAPH_COLOR_TARGET = 0x0099FF  # Bright orange for target
+CALLGRAPH_COLOR_CALLER = 0xCC8866  # Light blue-gray for caller
+CALLGRAPH_COLOR_CALLEE = 0x88CC88  # Light green for callee
 
 # Colors for displaying differences.
 # NOTE: Colors in this case are in the format "#RGB" because they are used for
 # the CSS.
-DIFF_COLOR_ADDED      = "#aaffaa"
-DIFF_COLOR_CHANGED    = "#ffff77"
-DIFF_COLOR_SUBTRACTED = "#ffaaaa"
-DIFF_COLOR_LINE_NO    = "#e0e0e0"
+# Dark mode palette for diff view
+DIFF_COLOR_ADDED      = "#1a4d1a"  # Dark green background
+DIFF_COLOR_CHANGED    = "#4d4d1a"  # Dark yellow/brown background
+DIFF_COLOR_SUBTRACTED = "#4d1a1a"  # Dark red background
+DIFF_COLOR_LINE_NO    = "#404040"  # Dark gray for line numbers
 
 # Colors for highlighting functions when the appropriate popup menu option is
 # selected, in 0xBGR format.
-HIGHLIGHT_FUNCTION_BEST       = 0xffff99
-HIGHLIGHT_FUNCTION_PARTIAL    = 0x99ff99
-HIGHLIGHT_FUNCTION_UNRELIABLE = 0x9999ff
+# Dark mode palette for function highlighting
+HIGHLIGHT_FUNCTION_BEST       = 0x0088DD  # Bright orange
+HIGHLIGHT_FUNCTION_PARTIAL    = 0x40CC40  # Medium green
+HIGHLIGHT_FUNCTION_UNRELIABLE = 0xCC6040  # Medium blue/purple
 
 # Colors for displaying control flow graph differences, in 0xBGR format.
-GRAPH_BBLOCK_MATCH_PARTIAL = 0xCCFFFF
-GRAPH_BBLOCK_MATCH_PERFECT = 0xFFFFFF
-GRAPH_BBLOCK_MATCH_NONE    = 0xCCCCFF
+# Dark mode palette for CFG comparison
+GRAPH_BBLOCK_MATCH_PARTIAL = 0x88AA66  # Light teal for partial match
+GRAPH_BBLOCK_MATCH_PERFECT = 0x66AA66  # Light green for perfect match
+GRAPH_BBLOCK_MATCH_NONE    = 0xAA6688  # Light purple for no match
 
 ################################################################################
 # Default export & diffing options

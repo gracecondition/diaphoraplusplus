@@ -46,6 +46,8 @@ HEUR_FLAG_UNRELIABLE  = 1
 HEUR_FLAG_SLOW        = 2
 # The heuristic should only be launched when diffing the same architecture
 HEUR_FLAG_SAME_CPU    = 3
+# The heuristic uses RVA/address matching (only useful for exact same binary, not version diffs)
+HEUR_FLAG_RVA_BASED   = 4
 
 #-------------------------------------------------------------------------------
 SELECT_FIELDS = """ f.address ea, f.name name1, df.address ea2, df.name name2,
@@ -92,18 +94,28 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_NO_FPS,
   "sql":""" select """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where (df.rva = f.rva
-                 or df.segment_rva = f.segment_rva)
-               and df.bytes_hash = f.bytes_hash
+              from functions f
+              join diff.functions df on df.rva = f.rva
+             where df.bytes_hash = f.bytes_hash
                and df.instructions = f.instructions
                and ((f.name = df.name and substr(f.name, 1, 4) != 'sub_')
                  or (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) = 'sub_'))
                and f.nodes >= 3
                and df.nodes >= 3
+               %POSTFIX%
+             union
+             select """ + get_query_fields(NAME) + """
+              from functions f
+              join diff.functions df on df.segment_rva = f.segment_rva
+             where df.bytes_hash = f.bytes_hash
+               and df.instructions = f.instructions
+               and ((f.name = df.name and substr(f.name, 1, 4) != 'sub_')
+                 or (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) = 'sub_'))
+               and f.nodes >= 3
+               and df.nodes >= 3
+               and df.rva != f.rva
                %POSTFIX%""",
-  "flags":[HEUR_FLAG_SAME_CPU]
+  "flags":[HEUR_FLAG_SAME_CPU, HEUR_FLAG_RVA_BASED]
 })
 
 NAME = "Same order and hash"
@@ -112,10 +124,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_NO_FPS,
   "sql":""" select """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where df.id = f.id
-               and df.bytes_hash = f.bytes_hash
+              from functions f
+              join diff.functions df on df.id = f.id
+             where df.bytes_hash = f.bytes_hash
                and df.instructions = f.instructions
                and ((f.name = df.name and substr(f.name, 1, 4) != 'sub_')
                  or (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) = 'sub_'))
@@ -132,10 +143,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_NO_FPS,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where f.function_hash = df.function_hash 
-               and ((f.nodes > 1 and df.nodes > 1
+              from functions f
+              join diff.functions df on f.function_hash = df.function_hash
+             where ((f.nodes > 1 and df.nodes > 1
                  and f.instructions > 5 and df.instructions > 5)
                   or f.instructions > 10 and df.instructions > 10)
                %POSTFIX%""",
@@ -148,10 +158,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_NO_FPS,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where f.bytes_hash = df.bytes_hash
-               and f.instructions > 5 and df.instructions > 5
+              from functions f
+              join diff.functions df on f.bytes_hash = df.bytes_hash
+             where f.instructions > 5 and df.instructions > 5
                %POSTFIX%""",
   "flags":[HEUR_FLAG_SAME_CPU]
 })
@@ -162,17 +171,16 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where df.address = f.address
-               and df.mnemonics = f.mnemonics
+              from functions f
+              join diff.functions df on df.address = f.address
+             where df.mnemonics = f.mnemonics
                and df.instructions = f.instructions
                and df.instructions > 5
                and ((f.name = df.name and substr(f.name, 1, 4) != 'sub_')
                  or (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) = 'sub_'))
                %POSTFIX%
              order by f.source_file = df.source_file""",
-  "flags":[]
+  "flags":[HEUR_FLAG_RVA_BASED]
 })
 
 NAME = "Same cleaned assembly"
@@ -181,10 +189,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.clean_assembly = df.clean_assembly
-         and f.nodes >= 3 and df.nodes >= 3
+        from functions f
+        join diff.functions df on f.clean_assembly = df.clean_assembly
+       where f.nodes >= 3 and df.nodes >= 3
          and f.name not like 'nullsub%'
          and df.name not like 'nullsub%'
          %POSTFIX%
@@ -198,10 +205,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.clean_microcode = df.clean_microcode
-         and f.instructions > 3 and df.instructions > 3
+        from functions f
+        join diff.functions df on f.clean_microcode = df.clean_microcode
+       where f.instructions > 3 and df.instructions > 3
          and f.name not like 'nullsub%'
          and df.name not like 'nullsub%'
          %POSTFIX%
@@ -215,10 +221,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.clean_pseudo = df.clean_pseudo
-         and f.pseudocode_lines > 5 and df.pseudocode_lines > 5
+        from functions f
+        join diff.functions df on f.clean_pseudo = df.clean_pseudo
+       where f.pseudocode_lines > 5 and df.pseudocode_lines > 5
          and f.name not like 'nullsub%'
          and df.name not like 'nullsub%'
          %POSTFIX%
@@ -232,19 +237,19 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.rva = df.rva
-        and f.instructions = df.instructions
-        and f.nodes = df.nodes
-        and f.edges = df.edges
+       from functions f
+       join diff.functions df on f.rva = df.rva
+                              and f.nodes = df.nodes
+                              and f.edges = df.edges
+                              and f.instructions = df.instructions
+      where f.rva is not null
+        and df.rva is not null
         and f.mnemonics = df.mnemonics
         and f.instructions > 3
         and df.instructions > 3
         and f.nodes > 1
-        %POSTFIX%
-      order by f.source_file = df.source_file""",
-  "flags":[]
+        %POSTFIX%""",
+  "flags":[HEUR_FLAG_RVA_BASED]
 })
 
 NAME = "Same RVA"
@@ -253,15 +258,13 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-              from functions f,
-                   diff.functions df
-             where df.rva = f.rva
-               and ((f.name = df.name and substr(f.name, 1, 4) != 'sub_')
-                or (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) = 'sub_'))
-               and  f.nodes >= 3
+              from functions f
+              join diff.functions df on df.rva = f.rva
+             where f.rva is not null
+               and df.rva is not null
+               and f.nodes >= 3
                and df.nodes >= 3
-               %POSTFIX%
-             order by f.source_file = df.source_file""",
+               %POSTFIX%""",
   "min":0.7,
   "flags":[HEUR_FLAG_SAME_CPU]
 })
@@ -275,20 +278,18 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_NO_FPS,
   "sql":"""select """ + get_query_fields("Equal pseudo-code") + """
-       from functions f,
-            diff.functions df
-      where f.pseudocode = df.pseudocode
-        and df.pseudocode is not null
+       from functions f
+       join diff.functions df on f.pseudocode = df.pseudocode
+      where df.pseudocode is not null
         and f.pseudocode_lines >= 5
         and f.name not like 'nullsub%'
         and df.name not like 'nullsub%'
         %POSTFIX%
       union
      select """ + get_query_fields("Equal assembly") + """
-       from functions f,
-            diff.functions df
-      where f.assembly = df.assembly
-        and df.assembly is not null
+       from functions f
+       join diff.functions df on f.assembly = df.assembly
+      where df.assembly is not null
         and f.instructions >= 4 and df.instructions >= 4
         and f.name not like 'nullsub%'
         and df.name not like 'nullsub%'
@@ -302,10 +303,9 @@ HEURISTICS.append({
   "category":"Best",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.microcode_spp = df.microcode_spp
-         and f.microcode_spp != 1
+        from functions f
+        join diff.functions df on f.microcode_spp = df.microcode_spp
+       where f.microcode_spp != 1
          and df.microcode_spp != 1
          and f.instructions > 5 and df.instructions > 5
          and f.nodes > 2 and df.nodes > 2
@@ -442,10 +442,9 @@ HEURISTICS.append({
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""
      select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.kgh_hash = df.kgh_hash
-        and f.md_index = df.md_index
+       from functions f
+       join diff.functions df on f.kgh_hash = df.kgh_hash
+      where f.md_index = df.md_index
         and f.nodes = df.nodes
         and f.nodes >= 4
         and f.outdegree = df.outdegree
@@ -462,10 +461,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.constants = df.constants
-        and f.constants_count = df.constants_count
+       from functions f
+       join diff.functions df on f.constants = df.constants
+      where f.constants_count = df.constants_count
         and f.constants_count > 1
         %POSTFIX%
       order by f.source_file = df.source_file""",
@@ -495,12 +493,10 @@ with shared_hashes as (
  having count(*) <= 2
 )
 select """ + get_query_fields(NAME) + """
-  from functions f,
-       diff.functions df,
-       shared_hashes
- where f.kgh_hash = df.kgh_hash
-   and df.kgh_hash = shared_hashes.kgh_hash
-   and f.nodes > 5
+  from functions f
+  join diff.functions df on f.kgh_hash = df.kgh_hash
+  join shared_hashes on df.kgh_hash = shared_hashes.kgh_hash
+ where f.nodes > 5
    and (substr(f.name, 1, 4) = 'sub_'
      or substr(df.name, 1, 4) = 'sub_')
    %POSTFIX%
@@ -529,12 +525,10 @@ HEURISTICS.append({
       having count(*) <= 2
      )
      select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df,
-            shared_mds
-      where f.md_index = df.md_index
-        and df.md_index = shared_mds.md_index
-        and f.nodes > 10
+       from functions f
+       join diff.functions df on f.md_index = df.md_index
+       join shared_mds on df.md_index = shared_mds.md_index
+      where f.nodes > 10
         %POSTFIX%
       order by f.source_file = df.source_file""",
   "flags":[]
@@ -590,10 +584,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.md_index = df.md_index
-         and f.md_index > 0
+        from functions f
+        join diff.functions df on f.md_index = df.md_index
+       where f.md_index > 0
          and f.nodes >= 3 and df.nodes >= 3
          and ((f.constants = df.constants
          and f.constants_count > 0))
@@ -608,10 +601,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-              from functions f,
-                  diff.functions df
-            where f.names = df.names
-              and f.names != '[]'
+              from functions f
+              join diff.functions df on f.names = df.names
+            where f.names != '[]'
               and f.md_index = df.md_index
               and f.instructions = df.instructions
               and f.nodes > 5 and df.nodes > 5
@@ -626,10 +618,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.mnemonics = df.mnemonics
-         and f.instructions = df.instructions
+        from functions f
+        join diff.functions df on f.mnemonics = df.mnemonics
+       where f.instructions = df.instructions
          and f.names = df.names
          and f.names != '[]'
          and f.instructions > 5 and df.instructions > 5
@@ -644,10 +635,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where df.pseudocode_hash1 = f.pseudocode_hash1
-        and df.pseudocode_hash2 = f.pseudocode_hash2
+       from functions f
+       join diff.functions df on df.pseudocode_hash1 = f.pseudocode_hash1
+      where df.pseudocode_hash2 = f.pseudocode_hash2
         and df.pseudocode_hash3 = f.pseudocode_hash3
         and df.pseudocode_hash1 is not null
         and df.pseudocode_hash2 is not null
@@ -665,10 +655,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.pseudocode_lines = df.pseudocode_lines
-        and f.names = df.names
+       from functions f
+       join diff.functions df on f.pseudocode_lines = df.pseudocode_lines
+      where f.names = df.names
         and df.names != '[]'
         and df.pseudocode_lines > 5
         and df.pseudocode is not null 
@@ -685,10 +674,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.mnemonics_spp = df.mnemonics_spp
-         and f.instructions = df.instructions
+        from functions f
+        join diff.functions df on f.mnemonics_spp = df.mnemonics_spp
+       where f.instructions = df.instructions
          and f.nodes > 1 and df.nodes > 1
          and df.instructions > 5
          %POSTFIX% """,
@@ -704,10 +692,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.nodes = df.nodes
-        and f.edges = df.edges
+       from functions f
+       join diff.functions df on f.nodes = df.nodes
+      where f.edges = df.edges
         and f.strongly_connected = df.strongly_connected
         and f.loops = df.loops
         and f.nodes > 5 and df.nodes > 5
@@ -727,10 +714,9 @@ HEURISTICS.append({
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""
        select distinct """ + get_query_fields(NAME) + """
-         from functions f,
-              diff.functions df
-        where f.names = df.names
-          and f.cyclomatic_complexity = df.cyclomatic_complexity
+         from functions f
+         join diff.functions df on f.names = df.names
+        where f.cyclomatic_complexity = df.cyclomatic_complexity
           and f.cyclomatic_complexity < 20
           and f.prototype2 = df.prototype2
           and df.names != '[]'
@@ -745,10 +731,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.names = df.names
-        and f.cyclomatic_complexity = df.cyclomatic_complexity
+       from functions f
+       join diff.functions df on f.names = df.names
+      where f.cyclomatic_complexity = df.cyclomatic_complexity
         and f.cyclomatic_complexity < 15
         and df.names != '[]'
         and (substr(f.name, 1, 4) = 'sub_' or substr(df.name, 1, 4) == 'sub_')
@@ -763,10 +748,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.switches = df.switches
-        and df.switches != '[]'
+       from functions f
+       join diff.functions df on f.switches = df.switches
+      where df.switches != '[]'
         and f.nodes > 5 and df.nodes > 5
         %POSTFIX%
       order by f.source_file = df.source_file""",
@@ -780,10 +764,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where df.pseudocode_hash1 = f.pseudocode_hash1
-        and f.pseudocode_lines > 5 and df.pseudocode_lines > 5
+       from functions f
+       join diff.functions df on df.pseudocode_hash1 = f.pseudocode_hash1
+      where f.pseudocode_lines > 5 and df.pseudocode_lines > 5
         %POSTFIX%
       order by f.source_file = df.source_file""",
   "min": 0.5,
@@ -796,10 +779,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where df.pseudocode_hash3 = f.pseudocode_hash3
-        and f.pseudocode_lines > 5 and df.pseudocode_lines > 5
+       from functions f
+       join diff.functions df on df.pseudocode_hash3 = f.pseudocode_hash3
+      where f.pseudocode_lines > 5 and df.pseudocode_lines > 5
         %POSTFIX%
       order by f.source_file = df.source_file""",
   "flags":[]
@@ -811,10 +793,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where df.pseudocode_hash2 = f.pseudocode_hash2
-        and f.pseudocode_lines > 5 and df.pseudocode_lines > 5
+       from functions f
+       join diff.functions df on df.pseudocode_hash2 = f.pseudocode_hash2
+      where f.pseudocode_lines > 5 and df.pseudocode_lines > 5
         %POSTFIX%
       order by f.source_file = df.source_file""",
   "flags":[]
@@ -826,10 +807,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select distinct """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where df.pseudocode_primes = f.pseudocode_primes
-        and f.pseudocode_lines >= 3
+       from functions f
+       join diff.functions df on df.pseudocode_primes = f.pseudocode_primes
+      where f.pseudocode_lines >= 3
         and length(f.pseudocode_primes) >= 35
         %POSTFIX%
       order by f.source_file = df.source_file""",
@@ -843,10 +823,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""  select distinct """ + get_query_fields(NAME) + """
-         from functions f,
-              diff.functions df
-        where substr(df.pseudocode_hash1, 1, 16) = substr(f.pseudocode_hash1, 1, 16)
-          and f.nodes > 5 and df.nodes > 5
+         from functions f
+         join diff.functions df on substr(df.pseudocode_hash1, 1, 16) = substr(f.pseudocode_hash1, 1, 16)
+        where f.nodes > 5 and df.nodes > 5
           %POSTFIX%
         order by f.source_file = df.source_file""",
   "min":0.5,
@@ -859,10 +838,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""  select distinct """ + get_query_fields(NAME) + """
-         from functions f,
-              diff.functions df
-        where substr(df.pseudocode_hash2, 1, 16) = substr(f.pseudocode_hash2, 1, 16)
-          and f.nodes > 5 and df.nodes > 5
+         from functions f
+         join diff.functions df on substr(df.pseudocode_hash2, 1, 16) = substr(f.pseudocode_hash2, 1, 16)
+        where f.nodes > 5 and df.nodes > 5
           %POSTFIX%
         order by f.source_file = df.source_file""",
   "min":0.5,
@@ -875,10 +853,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""  select distinct """ + get_query_fields(NAME) + """
-         from functions f,
-              diff.functions df
-        where substr(df.pseudocode_hash3, 1, 16) = substr(f.pseudocode_hash3, 1, 16)
-          and f.nodes > 5 and df.nodes > 5
+         from functions f
+         join diff.functions df on substr(df.pseudocode_hash3, 1, 16) = substr(f.pseudocode_hash3, 1, 16)
+        where f.nodes > 5 and df.nodes > 5
           %POSTFIX%
         order by f.source_file = df.source_file""",
   "min":0.5,
@@ -984,10 +961,9 @@ HEURISTICS.append({
   "category":"Partial",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.loops = df.loops
-        and df.loops > 1
+       from functions f
+       join diff.functions df on f.loops = df.loops
+      where df.loops > 1
         and f.nodes >= 3 and df.nodes >= 3
         %POSTFIX%
       order by f.source_file = df.source_file""",
@@ -1001,10 +977,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":""" select """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.nodes = df.nodes 
-         and f.edges = df.edges
+        from functions f
+        join diff.functions df on f.nodes = df.nodes
+       where f.edges = df.edges
          and f.indegree = df.indegree
          and f.outdegree = df.outdegree
          and f.cyclomatic_complexity = df.cyclomatic_complexity
@@ -1040,10 +1015,9 @@ HEURISTICS.append({
   "ratio":HEUR_TYPE_RATIO_MAX,
   "sql":"""
      select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.strongly_connected = df.strongly_connected
-        and df.strongly_connected > 1
+       from functions f
+       join diff.functions df on f.strongly_connected = df.strongly_connected
+      where df.strongly_connected > 1
         and f.nodes > 5 and df.nodes > 5
         and f.strongly_connected_spp > 1
         and df.strongly_connected_spp > 1
@@ -1062,10 +1036,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.nodes = df.nodes
-         and f.edges = df.edges
+        from functions f
+        join diff.functions df on f.nodes = df.nodes
+       where f.edges = df.edges
          and f.mnemonics = df.mnemonics
          and f.cyclomatic_complexity = df.cyclomatic_complexity
          and f.nodes > 1 and f.edges > 0
@@ -1084,10 +1057,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.nodes = df.nodes
-         and f.edges = df.edges
+        from functions f
+        join diff.functions df on f.nodes = df.nodes
+       where f.edges = df.edges
          and f.prototype2 = df.prototype2
          and f.cyclomatic_complexity = df.cyclomatic_complexity
          and f.prototype2 != 'int()'
@@ -1105,10 +1077,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.nodes = df.nodes
-         and f.edges = df.edges
+        from functions f
+        join diff.functions df on f.nodes = df.nodes
+       where f.edges = df.edges
          and f.cyclomatic_complexity = df.cyclomatic_complexity
          and f.nodes >= 3 and f.edges > 2
          and f.indegree = df.indegree
@@ -1127,10 +1098,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":""" select distinct """ + get_query_fields(NAME) + """
-        from functions f,
-             diff.functions df
-       where f.nodes = df.nodes
-         and f.edges = df.edges
+        from functions f
+        join diff.functions df on f.nodes = df.nodes
+       where f.edges = df.edges
          and f.cyclomatic_complexity = df.cyclomatic_complexity
          and f.nodes > 1 and f.edges > 0
          %POSTFIX%
@@ -1147,10 +1117,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.cyclomatic_complexity = df.cyclomatic_complexity
-        and f.cyclomatic_complexity >= 50
+       from functions f
+       join diff.functions df on f.cyclomatic_complexity = df.cyclomatic_complexity
+      where f.cyclomatic_complexity >= 50
         %POSTFIX%
       order by f.source_file = df.source_file""",
   "flags":[HEUR_FLAG_SLOW]
@@ -1165,10 +1134,9 @@ HEURISTICS.append({
   "category":"Unreliable",
   "ratio":HEUR_TYPE_RATIO,
   "sql":"""select """ + get_query_fields(NAME) + """
-       from functions f,
-            diff.functions df
-      where f.strongly_connected = df.strongly_connected
-        and f.tarjan_topological_sort = df.tarjan_topological_sort
+       from functions f
+       join diff.functions df on f.strongly_connected = df.strongly_connected
+      where f.tarjan_topological_sort = df.tarjan_topological_sort
         and f.strongly_connected >= 3
         and f.nodes > 10
         %POSTFIX%

@@ -26,28 +26,38 @@ from idaapi import warning
 #-------------------------------------------------------------------------------
 def resolve_diaphora():
   config_dir = os.path.dirname(__file__)
-  config_file = os.path.join(config_dir, "diaphora_plugin.cfg")
+  config_file = os.path.join(config_dir, "diaphoraplusplus_plugin.cfg")
   if not os.path.exists(config_file):
     warning(f"The configuration file {config_file} does not exist.")
     return None
-  
+
   config = configparser.ConfigParser()
   config.read(config_file)
 
-  path = config["Diaphora"]["path"]
-  sys.path.append(path)
+  section = "Diaphora++" if "Diaphora++" in config else "Diaphora"
+  if section not in config:
+    warning(f"The configuration file {config_file} does not have a [Diaphora++] or [Diaphora] section.")
+    return None
+
+  path = config[section].get("path", "").strip()
+  if not path:
+    warning(f"The configuration file {config_file} does not define a path for section [{section}].")
+    return None
+
+  if path not in sys.path:
+    sys.path.insert(0, path)  # Prepend so Diaphora++ wins over other installs
 
   from diaphora_ida import main
   return main
 
 #-------------------------------------------------------------------------------
-class DiaphoraPlugin(idaapi.plugin_t):
-  wanted_name = "Diaphora"
-  version = "3.2.0"
+class DiaphoraPlusPlusPlugin(idaapi.plugin_t):
+  wanted_name = "Diaphora++"
+  version = "3.2.1++"
   wanted_hotkey = ""
-  comment = "Diaphora by joxeankoret"
+  comment = "Diaphora++ by joxeankoret"
   website = "https://github.com/joxeankoret/diaphora"
-  help = "Export the current binary or diff against another binary"
+  help = "Export the current binary or diff against another binary (Diaphora++)"
   flags = 0
 
   def init(self):
@@ -68,5 +78,4 @@ class DiaphoraPlugin(idaapi.plugin_t):
 
 #-------------------------------------------------------------------------------
 def PLUGIN_ENTRY():
-  return DiaphoraPlugin()
-
+  return DiaphoraPlusPlusPlugin()
