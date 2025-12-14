@@ -8,9 +8,7 @@ Joxean Koret
 Public domain
 """
 
-from difflib import unified_diff
-
-from diaphora import CChooser, log
+from diaphora import CChooser, log, unified_diff
 
 #-------------------------------------------------------------------------------
 # pylint: disable=unused-argument

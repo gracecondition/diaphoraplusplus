@@ -22,7 +22,6 @@ import re
 import os
 import sys
 import time
-import difflib
 
 import idc
 import idaapi
@@ -32,6 +31,36 @@ from PyQt5 import QtWidgets
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import NasmLexer, CppLexer, DiffLexer
+
+# cdifflib is REQUIRED for optimal performance
+from cdifflib import CSequenceMatcher as SequenceMatcher
+
+#-------------------------------------------------------------------------------
+def _mdiff(fromlines, tolines, context=None, linejunk=None, charjunk=None):
+  """
+  Reimplementation of difflib._mdiff using cdifflib's CSequenceMatcher.
+  Returns generator yielding marked up from/to side by side differences.
+  """
+  matcher = SequenceMatcher(linejunk, fromlines, tolines)
+
+  for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    if tag == 'equal':
+      for i, line in enumerate(fromlines[i1:i2]):
+        yield ((i1 + i + 1, line), (j1 + i + 1, tolines[j1 + i]), False)
+    elif tag == 'delete':
+      for i, line in enumerate(fromlines[i1:i2]):
+        yield ((i1 + i + 1, line), (None, ''), True)
+    elif tag == 'insert':
+      for i, line in enumerate(tolines[j1:j2]):
+        yield ((None, ''), (j1 + i + 1, line), True)
+    elif tag == 'replace':
+      # Show side-by-side replacements
+      for i in range(max(i2 - i1, j2 - j1)):
+        left_line = fromlines[i1 + i] if i1 + i < i2 else ''
+        right_line = tolines[j1 + i] if j1 + i < j2 else ''
+        left_num = (i1 + i + 1) if i1 + i < i2 else None
+        right_num = (j1 + i + 1) if j1 + i < j2 else None
+        yield ((left_num, left_line), (right_num, right_line), True)
 
 #-------------------------------------------------------------------------------
 DIFF_COLOR_ADDED      = "#aaffaa"
@@ -113,7 +142,7 @@ class CHtmlDiff:
 
   def make_file(self, lhs, rhs, fmt, lex):
     rows = []
-    for left, right, changed in difflib._mdiff(lhs, rhs):
+    for left, right, changed in _mdiff(lhs, rhs):
       lno, ltxt = left
       rno, rtxt = right
 

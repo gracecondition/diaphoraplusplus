@@ -38,17 +38,8 @@ from multiprocessing import cpu_count
 import diaphora_config as config
 import diaphora_heuristics
 
-try:
-  from cdifflib import CSequenceMatcher as SequenceMatcher
-  HAS_CDIFFLIB = True
-except ImportError:
-  HAS_CDIFFLIB = False
-  if config.SHOW_IMPORT_WARNINGS:
-    print("WARNING: Python library 'cdifflib' not found. Installing it will significantly improve text diffing performance.")
-    print("INFO: Alternatively, you can silence this warning by changing the value of SHOW_IMPORT_WARNINGS in diaphora_config.py.")
-  from difflib import SequenceMatcher
-
-from difflib import unified_diff
+# cdifflib is REQUIRED for optimal performance - no fallbacks!
+from cdifflib import CSequenceMatcher as SequenceMatcher
 
 import ml
 from ml.basic_engine import get_model_comparison_data, ML_AVAILABLE
@@ -161,6 +152,31 @@ def real_quick_ratio(buf1, buf2):
     return 0
   seq = SequenceMatcher(None, buf1.split("\n"), buf2.split("\n"))
   return seq.real_quick_ratio()
+
+
+#-------------------------------------------------------------------------------
+def unified_diff(a, b, fromfile='', tofile='', fromfiledate='', tofiledate='',
+                 n=3, lineterm='\n'):
+  """
+  Reimplementation of difflib.unified_diff using cdifflib's CSequenceMatcher.
+  Generate a unified diff from two sequences of lines.
+  """
+  matcher = SequenceMatcher(None, a, b)
+  for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    if tag == 'equal':
+      for line in a[i1:i2]:
+        yield ' ' + line + lineterm
+    elif tag == 'delete':
+      for line in a[i1:i2]:
+        yield '-' + line + lineterm
+    elif tag == 'insert':
+      for line in b[j1:j2]:
+        yield '+' + line + lineterm
+    elif tag == 'replace':
+      for line in a[i1:i2]:
+        yield '-' + line + lineterm
+      for line in b[j1:j2]:
+        yield '+' + line + lineterm
 
 
 #-------------------------------------------------------------------------------
@@ -345,14 +361,33 @@ def sqlite3_connect(db_name):
   # Performance optimizations (connection-level only, no schema changes)
   cur = db.cursor()
   try:
-    # Large cache: 128MB instead of default ~2MB (RAM only, no file changes)
-    cur.execute("PRAGMA cache_size = -131072")
+    # Adjust cache size based on database size to prevent memory issues
+    try:
+      db_size = os.path.getsize(db_name)
+      if db_size < 1024 * 1024 * 1024:  # < 1GB
+        cur.execute("PRAGMA cache_size = -131072")  # 128MB
+      elif db_size < 5 * 1024 * 1024 * 1024:  # < 5GB
+        cur.execute("PRAGMA cache_size = -65536")   # 64MB
+      else:  # >= 5GB
+        cur.execute("PRAGMA cache_size = -32768")   # 32MB
+    except OSError:
+      # If file doesn't exist yet, use moderate cache
+      cur.execute("PRAGMA cache_size = -65536")  # 64MB
 
     # Keep temp tables in memory (no file changes)
     cur.execute("PRAGMA temp_store = MEMORY")
 
-    # Memory-map 512MB of database for faster reads (no file changes)
-    cur.execute("PRAGMA mmap_size = 536870912")
+    # Memory-map database for faster reads (no file changes)
+    try:
+        db_size = os.path.getsize(db_name)
+        if db_size < 1024 * 1024 * 1024: # 1GB
+            cur.execute("PRAGMA mmap_size = 536870912") # 512MB
+        elif db_size < 4 * 1024 * 1024 * 1024: # 4GB
+            cur.execute("PRAGMA mmap_size = 268435456") # 256MB
+    except OSError:
+        # If the file does not exist, getsize will fail.
+        # In this case, we just don't set mmap_size.
+        pass
 
     # Faster synchronous mode (safe for read-heavy diffing, no schema changes)
     cur.execute("PRAGMA synchronous = NORMAL")
@@ -1595,15 +1630,17 @@ class CBinDiff:
                        select {fields}
                          from diff.functions) x"""
       cur.execute(sql)
-      rows = cur.fetchall()
-      if len(rows) > 0:
-        for row in rows:
-          name = row["mangled_function"]
-          ea = row["ea"]
-          nodes = int(row["nodes"])
+      # Use fetchone() loop instead of fetchall() to avoid loading all rows into memory
+      while True:
+        row = cur.fetchone()
+        if row is None:
+          break
+        name = row["mangled_function"]
+        ea = row["ea"]
+        nodes = int(row["nodes"])
 
-          item = [ea, name, ea, name, "100% equal", 1, nodes, nodes]
-          self.add_match(name, name, 1.0, item, "best")
+        item = [ea, name, ea, name, "100% equal", 1, nodes, nodes]
+        self.add_match(name, name, 1.0, item, "best")
     finally:
       cur.close()
 
@@ -3416,14 +3453,16 @@ class CBinDiff:
 
       # First, retrieve the main database functions in that area...
       cur.execute(sql.format(db="main"), range1)
-      main_rows = list(cur.fetchall())
+      # fetchall() already returns a list, no need to wrap in list()
+      main_rows = cur.fetchall()
       size = len(main_rows)
       # If the number of functions in that gap is less than a hardcoded size, do
       # continue...
       if size > 0 and size <= config.MAX_FUNCTIONS_PER_GAP:
         # Then retrieve the diff database functions in that area...
         cur.execute(sql.format(db="diff"), range2)
-        diff_rows = list(cur.fetchall())
+        # fetchall() already returns a list, no need to wrap in list()
+        diff_rows = cur.fetchall()
         size = len(diff_rows)
         # Check again the same number of maximum hardcoded functions that we'll
         # consider for this heuristic...
@@ -3733,7 +3772,8 @@ class CBinDiff:
     try:
       sql = "select * from {db}.callgraph where func_id = ?"
       cur.execute(sql.format(db=db_name), (func_id,))
-      rows = list(cur.fetchall())
+      # fetchall() already returns a list, no need to wrap in list()
+      rows = cur.fetchall()
     finally:
       cur.close()
     return rows

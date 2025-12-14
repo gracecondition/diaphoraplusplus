@@ -6,10 +6,8 @@ import orjson as json
 
 from collections import OrderedDict
 
-try:
-  from cdifflib import CSequenceMatcher as SequenceMatcher # type: ignore
-except ImportError:
-  from difflib import SequenceMatcher
+# cdifflib is REQUIRED for optimal performance - no fallbacks!
+from cdifflib import CSequenceMatcher as SequenceMatcher # type: ignore
 
 import diaphora_config as config
 

@@ -21,7 +21,6 @@ import sys
 import time
 import orjson as json
 import decimal
-import difflib
 import sqlite3
 import datetime
 import traceback
@@ -39,6 +38,12 @@ from idautils import *
 import idaapi
 
 idaapi.require("diaphora")
+
+# Import unified_diff from diaphora (cdifflib-based implementation)
+from diaphora import unified_diff
+
+# cdifflib is REQUIRED for optimal performance
+from cdifflib import CSequenceMatcher as SequenceMatcher
 
 try:
   import ida_hexrays as hr
@@ -60,6 +65,33 @@ from others.tarjan_sort import strongly_connected_components, robust_topological
 
 from jkutils.factor import primesbelow
 from jkutils.graph_hashes import CKoretKaramitasHash
+
+#-------------------------------------------------------------------------------
+def _mdiff(fromlines, tolines, context=None, linejunk=None, charjunk=None):
+  """
+  Reimplementation of difflib._mdiff using cdifflib's CSequenceMatcher.
+  Returns generator yielding marked up from/to side by side differences.
+  """
+  matcher = SequenceMatcher(linejunk, fromlines, tolines)
+
+  for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    if tag == 'equal':
+      for i, line in enumerate(fromlines[i1:i2]):
+        yield ((i1 + i + 1, line), (j1 + i + 1, tolines[j1 + i]), False)
+    elif tag == 'delete':
+      for i, line in enumerate(fromlines[i1:i2]):
+        yield ((i1 + i + 1, line), (None, ''), True)
+    elif tag == 'insert':
+      for i, line in enumerate(tolines[j1:j2]):
+        yield ((None, ''), (j1 + i + 1, line), True)
+    elif tag == 'replace':
+      # Show side-by-side replacements
+      for i in range(max(i2 - i1, j2 - j1)):
+        left_line = fromlines[i1 + i] if i1 + i < i2 else ''
+        right_line = tolines[j1 + i] if j1 + i < j2 else ''
+        left_num = (i1 + i + 1) if i1 + i < i2 else None
+        right_num = (j1 + i + 1) if j1 + i < j2 else None
+        yield ((left_num, left_line), (right_num, right_line), True)
 
 try:
   from jkutils.IDAMagicStrings import get_source_strings
@@ -1598,7 +1630,7 @@ class CIDABinDiff(diaphora.CBinDiff):
 
         fmt = _make_formatter(with_linenos=False)
         if not html:
-          uni_diff = difflib.unified_diff(buf1.split("\n"), buf2.split("\n"))
+          uni_diff = unified_diff(buf1.split("\n"), buf2.split("\n"))
           tmp = []
           for line in uni_diff:
             tmp.append(line.strip("\n"))
@@ -1801,7 +1833,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     html_diff = CHtmlDiff()
     fmt = _make_formatter(with_linenos=False)
     if not html:
-      uni_diff = difflib.unified_diff(
+      uni_diff = unified_diff(
         buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
       )
       buf = "\n".join([line.rstrip("\n") for line in uni_diff])
@@ -1821,7 +1853,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     if not buffers:
       return None
     (buf1, buf2, row1, row2) = buffers
-    uni_diff = difflib.unified_diff(
+    uni_diff = unified_diff(
       buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
     )
     return "\n".join([line.rstrip("\n") for line in uni_diff])
@@ -2192,7 +2224,7 @@ class CIDABinDiff(diaphora.CBinDiff):
     address1 = json.loads(diff_rows[0]["assembly_addrs"])
     address2 = json.loads(diff_rows[1]["assembly_addrs"])
 
-    diff_list = difflib._mdiff(lines1.splitlines(1), lines2.splitlines(1))
+    diff_list = _mdiff(lines1.splitlines(1), lines2.splitlines(1))
     for x in diff_list:
       left, right, _ = x
       left_line = left[0]
@@ -4044,7 +4076,7 @@ class CHtmlDiff:
 
   def make_file(self, lhs, rhs, fmt, lex):
     rows = []
-    for left, right, changed in difflib._mdiff(lhs, rhs):
+    for left, right, changed in _mdiff(lhs, rhs):
       lno, ltxt = left
       rno, rtxt = right
 
