@@ -50,17 +50,16 @@ HEUR_FLAG_SAME_CPU    = 3
 HEUR_FLAG_RVA_BASED   = 4
 
 #-------------------------------------------------------------------------------
+# Lightweight SELECT fields - excludes massive text blobs (pseudocode, assembly, clean_*, etc.)
+# These text fields are still usable in JOIN/WHERE clauses for matching logic,
+# but are NOT loaded into Python memory upfront. They're lazy-loaded by check_ratio()
+# only when actually needed for similarity scoring. This reduces memory from ~50GB to ~50MB.
 SELECT_FIELDS = """ f.address ea, f.name name1, df.address ea2, df.name name2,
                   {heur} description,
-                  f.pseudocode pseudo1, df.pseudocode pseudo2,
-                  f.assembly asm1, df.assembly asm2,
                   f.pseudocode_primes pseudo_primes1, df.pseudocode_primes pseudo_primes2,
                   f.nodes nodes1, df.nodes nodes2,
                   cast(f.md_index as real) md1, cast(df.md_index as real) md2,
-                  f.clean_assembly clean_assembly1, df.clean_assembly clean_assembly2,
-                  f.clean_pseudo clean_pseudo1, df.clean_pseudo clean_pseudo2,
                   f.mangled_function mangled1, df.mangled_function mangled2,
-                  f.clean_microcode clean_micro1, df.clean_microcode clean_micro2,
                   f.bytes_hash bytes_hash1, df.bytes_hash bytes_hash2,
                   f.edges edges1, df.edges edges2,
                   f.indegree indegree1, df.indegree indegree2,

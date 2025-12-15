@@ -23,13 +23,12 @@ CALLGRAPH_COLOR_CALLER = 0xCC8866  # Light blue-gray for caller
 CALLGRAPH_COLOR_CALLEE = 0x88CC88  # Light green for callee
 
 # Colors for displaying differences.
-# NOTE: Colors in this case are in the format "#RGB" because they are used for
-# the CSS.
-# Dark mode palette for diff view
-DIFF_COLOR_ADDED      = "#1a4d1a"  # Dark green background
-DIFF_COLOR_CHANGED    = "#4d4d1a"  # Dark yellow/brown background
-DIFF_COLOR_SUBTRACTED = "#4d1a1a"  # Dark red background
-DIFF_COLOR_LINE_NO    = "#404040"  # Dark gray for line numbers
+# NOTE: Colors can be in hex "#RGB" or rgba() format for CSS.
+# Traditional diff colors: green (added), red (removed), yellow (modified)
+DIFF_COLOR_ADDED      = "rgba(46, 160, 67, 0.35)"    # Bright green - added lines
+DIFF_COLOR_CHANGED    = "rgba(255, 193, 7, 0.35)"    # Pleasant amber/yellow - modified lines
+DIFF_COLOR_SUBTRACTED = "rgba(248, 81, 73, 0.35)"    # Bright red - removed lines
+DIFF_COLOR_LINE_NO    = "#404040"                    # Dark gray for line numbers
 
 # Colors for highlighting functions when the appropriate popup menu option is
 # selected, in 0xBGR format.

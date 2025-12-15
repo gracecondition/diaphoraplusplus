@@ -67,10 +67,56 @@ from jkutils.factor import primesbelow
 from jkutils.graph_hashes import CKoretKaramitasHash
 
 #-------------------------------------------------------------------------------
+def _fancy_replace(a, alo, ahi, b, blo, bhi):
+  """
+  Marks character-level differences between two text segments.
+  Uses markers: \x00- for deletions, \x00+ for additions, \x00^ for changes, \x01 to end.
+  Parameters:
+    a, b: lists of strings (lines)
+    alo, ahi, blo, bhi: indices into those lists
+  """
+  # Extract the actual strings from the line lists
+  aline = a[alo] if alo < len(a) else ''
+  bline = b[blo] if blo < len(b) else ''
+
+  # Quick check for equal strings
+  if aline == bline:
+    return aline, bline
+
+  # Check if lines are similar enough for character-level diff
+  # If they're too different, treat as separate delete + insert
+  cruncher = SequenceMatcher(None, aline, bline)
+  ratio = cruncher.ratio()
+
+  # Only do character-level diff if lines are at least 60% similar
+  if ratio < 0.6:
+    # Lines are too different - treat as deletion + insertion, not a change
+    return '\x00-' + aline + '\x01', '\x00+' + bline + '\x01'
+
+  # Do character-level diff for similar lines
+  aout = []
+  bout = []
+
+  for tag, ai1, ai2, bi1, bi2 in cruncher.get_opcodes():
+    if tag == 'replace':
+      aout.append('\x00^' + aline[ai1:ai2] + '\x01')
+      bout.append('\x00^' + bline[bi1:bi2] + '\x01')
+    elif tag == 'delete':
+      aout.append('\x00-' + aline[ai1:ai2] + '\x01')
+    elif tag == 'insert':
+      bout.append('\x00+' + bline[bi1:bi2] + '\x01')
+    elif tag == 'equal':
+      aout.append(aline[ai1:ai2])
+      bout.append(bline[bi1:bi2])
+
+  return ''.join(aout), ''.join(bout)
+
+#-------------------------------------------------------------------------------
 def _mdiff(fromlines, tolines, context=None, linejunk=None, charjunk=None):
   """
   Reimplementation of difflib._mdiff using cdifflib's CSequenceMatcher.
   Returns generator yielding marked up from/to side by side differences.
+  Includes character-level diff markers for changed lines.
   """
   matcher = SequenceMatcher(linejunk, fromlines, tolines)
 
@@ -80,17 +126,34 @@ def _mdiff(fromlines, tolines, context=None, linejunk=None, charjunk=None):
         yield ((i1 + i + 1, line), (j1 + i + 1, tolines[j1 + i]), False)
     elif tag == 'delete':
       for i, line in enumerate(fromlines[i1:i2]):
-        yield ((i1 + i + 1, line), (None, ''), True)
+        yield ((i1 + i + 1, '\x00-' + line + '\x01'), (None, ''), True)
     elif tag == 'insert':
       for i, line in enumerate(tolines[j1:j2]):
-        yield ((None, ''), (j1 + i + 1, line), True)
+        yield ((None, ''), (j1 + i + 1, '\x00+' + line + '\x01'), True)
     elif tag == 'replace':
-      # Show side-by-side replacements
+      # Do character-level diff for replaced lines
       for i in range(max(i2 - i1, j2 - j1)):
-        left_line = fromlines[i1 + i] if i1 + i < i2 else ''
-        right_line = tolines[j1 + i] if j1 + i < j2 else ''
-        left_num = (i1 + i + 1) if i1 + i < i2 else None
-        right_num = (j1 + i + 1) if j1 + i < j2 else None
+        if i1 + i < i2 and j1 + i < j2:
+          # Both lines exist - do character-level diff
+          left_line, right_line = _fancy_replace(
+            fromlines, i1 + i, i1 + i + 1,
+            tolines, j1 + i, j1 + i + 1
+          )
+          left_num = i1 + i + 1
+          right_num = j1 + i + 1
+        elif i1 + i < i2:
+          # Only left line exists
+          left_line = '\x00-' + fromlines[i1 + i] + '\x01'
+          right_line = ''
+          left_num = i1 + i + 1
+          right_num = None
+        else:
+          # Only right line exists
+          left_line = ''
+          right_line = '\x00+' + tolines[j1 + i] + '\x01'
+          left_num = None
+          right_num = j1 + i + 1
+
         yield ((left_num, left_line), (right_num, right_line), True)
 
 try:
@@ -272,13 +335,76 @@ def get_string_at(ea):
 
 
 #-------------------------------------------------------------------------------
+from pygments.style import Style
+from pygments.token import Keyword, Name, Comment, String, Error, Number, Operator, Generic, Whitespace, Punctuation, Other, Literal
+
+class DiaphoraStyle(Style):
+  """
+  Enhanced Monokai-based style with better function highlighting for code diffs.
+  """
+  background_color = "transparent"
+  default_style = ""
+
+  styles = {
+    Comment:                'italic #75715e',
+    Comment.Preproc:        'noitalic #bc6ec5',
+
+    Keyword:                'bold #66d9ef',
+    Keyword.Namespace:      'bold #f92672',
+    Keyword.Type:           '#66d9ef',
+
+    Name:                   '#f8f8f2',
+    Name.Attribute:         '#a6e22e',
+    Name.Builtin:           '#e6db74',
+    Name.Builtin.Pseudo:    '#66d9ef',
+    Name.Class:             'bold #a6e22e',
+    Name.Constant:          '#ae81ff',
+    Name.Decorator:         '#a6e22e',
+    Name.Exception:         'bold #a6e22e',
+    Name.Function:          'bold #a6e22e',  # Function names in green
+    Name.Function.Magic:    '#a6e22e',
+    Name.Label:             '#e6db74',
+    Name.Namespace:         '#f8f8f2',
+    Name.Other:             '#a6e22e',
+    Name.Tag:               '#f92672',
+    Name.Variable:          '#f8f8f2',
+    Name.Variable.Class:    '#f8f8f2',
+    Name.Variable.Global:   '#f8f8f2',
+    Name.Variable.Instance: '#f8f8f2',
+
+    Number:                 '#ae81ff',
+
+    Operator:               '#f92672',
+    Operator.Word:          'bold #f92672',
+
+    Punctuation:            '#f8f8f2',
+
+    String:                 '#e6db74',
+    String.Char:            '#e6db74',
+    String.Doc:             'italic #e6db74',
+    String.Escape:          'bold #ae81ff',
+
+    Generic.Deleted:        '#f92672',
+    Generic.Emph:           'italic',
+    Generic.Error:          '#f92672',
+    Generic.Heading:        'bold #75715e',
+    Generic.Inserted:       '#a6e22e',
+    Generic.Output:         '#66d9ef',
+    Generic.Prompt:         'bold #75715e',
+    Generic.Strong:         'bold',
+    Generic.Subheading:     'bold #75715e',
+    Generic.Traceback:      '#f8f8f2',
+
+    Error:                  'bg:#f92672 #f8f8f2',
+  }
+
 # Shared formatter for dark-themed diffs
 def _make_formatter(with_linenos=False):
   """
-  Centralized formatter with a dark-friendly palette.
+  Centralized formatter with enhanced C++ syntax highlighting.
   """
   return HtmlFormatter(
-    style="monokai", noclasses=False, linenos=with_linenos, nobackground=False
+    style=DiaphoraStyle, noclasses=False, linenos=with_linenos, nobackground=True
   )
 
 
@@ -4080,13 +4206,15 @@ class CHtmlDiff:
       lno, ltxt = left
       rno, rtxt = right
 
+      # Apply syntax highlighting to all lines (both changed and unchanged)
+      ltxt = self._stop_wasting_space(ltxt)
+      rtxt = self._stop_wasting_space(rtxt)
+
       if not changed:
         ltxt = highlight(ltxt, lex, fmt)
         rtxt = highlight(rtxt, lex, fmt)
       else:
-        ltxt = self._stop_wasting_space(ltxt)
-        rtxt = self._stop_wasting_space(rtxt)
-
+        # For changed lines, escape HTML first, then highlight won't work well with markers
         ltxt = ltxt.replace(" ", "&nbsp;")
         rtxt = rtxt.replace(" ", "&nbsp;")
         ltxt = ltxt.replace("<", "&lt;")
@@ -4098,6 +4226,7 @@ class CHtmlDiff:
       rows.append(row)
 
     all_the_rows = "\n".join(rows)
+    # Replace character-level diff markers with HTML spans
     all_the_rows = (
       all_the_rows.replace("\x00+", '<span class="diff_add">')
       .replace("\x00-", '<span class="diff_sub">')

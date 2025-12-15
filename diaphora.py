@@ -34,6 +34,7 @@ import traceback
 from io import StringIO
 from threading import Lock
 from multiprocessing import cpu_count
+from collections import OrderedDict
 
 import diaphora_config as config
 import diaphora_heuristics
@@ -131,6 +132,29 @@ def result_iter(cursor, arraysize=1000):
     for result in results:
       yield result
 
+
+#-------------------------------------------------------------------------------
+class LRUCache(OrderedDict):
+  """
+  Bounded LRU cache to prevent unbounded memory growth during diffing.
+  When the cache exceeds maxsize, the oldest entries are evicted.
+  """
+  def __init__(self, maxsize=50000):
+    self.maxsize = maxsize
+    super().__init__()
+
+  def __getitem__(self, key):
+    value = super().__getitem__(key)
+    self.move_to_end(key)
+    return value
+
+  def __setitem__(self, key, value):
+    if key in self:
+      self.move_to_end(key)
+    super().__setitem__(key, value)
+    if len(self) > self.maxsize:
+      oldest = next(iter(self))
+      del self[oldest]
 
 #-------------------------------------------------------------------------------
 def quick_ratio(buf1, buf2):
@@ -463,9 +487,10 @@ class CBinDiff:
     self.create_choosers()
 
     self.last_diff_db = None
-    self.re_cache = {}
-    self._funcs_cache = {}
-    self.ratios_cache = {}
+    # Bounded caches to prevent unbounded memory growth (max 50K entries each)
+    self.re_cache = LRUCache(maxsize=1000)  # Regex compilation cache
+    self._funcs_cache = LRUCache(maxsize=10000)  # Function properties cache
+    self.ratios_cache = LRUCache(maxsize=50000)  # Ratio calculations cache
     self.items_lock = Lock()
 
     self.is_symbols_stripped = False
@@ -1873,6 +1898,30 @@ class CBinDiff:
     bytes_hash1 = main_d["bytes_hash"]
     bytes_hash2 = diff_d["bytes_hash"]
 
+    # Lazy-load text fields if they weren't included in the initial query
+    # This prevents loading 50GB of text data upfront for all matches
+    if pseudo1 is None or clean_assembly1 is None or clean_pseudo1 is None or clean_micro1 is None:
+      text_fields = self.lazy_load_text_fields(ea1, "main")
+      if pseudo1 is None:
+        pseudo1 = text_fields["pseudo"]
+      if clean_assembly1 is None:
+        clean_assembly1 = text_fields["clean_assembly"]
+      if clean_pseudo1 is None:
+        clean_pseudo1 = text_fields["clean_pseudo"]
+      if clean_micro1 is None:
+        clean_micro1 = text_fields["clean_micro"]
+
+    if pseudo2 is None or clean_assembly2 is None or clean_pseudo2 is None or clean_micro2 is None:
+      text_fields = self.lazy_load_text_fields(ea2, "diff")
+      if pseudo2 is None:
+        pseudo2 = text_fields["pseudo"]
+      if clean_assembly2 is None:
+        clean_assembly2 = text_fields["clean_assembly"]
+      if clean_pseudo2 is None:
+        clean_pseudo2 = text_fields["clean_pseudo"]
+      if clean_micro2 is None:
+        clean_micro2 = text_fields["clean_micro"]
+
     md1 = float(md1)
     md2 = float(md2)
 
@@ -1988,6 +2037,40 @@ class CBinDiff:
       or len(self.matched_secondary) == self.total_functions2
     )
 
+  def lazy_load_text_fields(self, ea, db_name="main"):
+    """
+    Lazy-load expensive text fields (pseudocode, assembly, etc.) only when needed.
+    This prevents loading 50GB of text data upfront for all matches.
+    Returns a dict with the text fields, or empty strings if not available.
+    """
+    cur = self.db_cursor()
+    try:
+      sql = f"""select pseudocode, assembly, clean_assembly, clean_pseudo, clean_microcode
+                from {db_name}.functions where address = ?"""
+      cur.execute(sql, (str(ea),))
+      row = cur.fetchone()
+      if row:
+        return {
+          "pseudo": row["pseudocode"] if row["pseudocode"] else "",
+          "asm": row["assembly"] if row["assembly"] else "",
+          "clean_assembly": row["clean_assembly"] if row["clean_assembly"] else "",
+          "clean_pseudo": row["clean_pseudo"] if row["clean_pseudo"] else "",
+          "clean_micro": row["clean_microcode"] if row["clean_microcode"] else ""
+        }
+    except:
+      pass
+    finally:
+      cur.close()
+
+    # Return empty values if fetch failed
+    return {
+      "pseudo": "",
+      "asm": "",
+      "clean_assembly": "",
+      "clean_pseudo": "",
+      "clean_micro": ""
+    }
+
   def check_match(self, row, ratio=None, debug=False):
     """
     Check a single SQL heuristic match and return whether it should be ignored
@@ -2003,14 +2086,14 @@ class CBinDiff:
     main_d = {}
     main_d["ea"] = row["ea"]
     main_d["name"] = row["name1"]
-    main_d["pseudo"] = row["pseudo1"]
-    main_d["asm"] = row["asm1"]
+    main_d["pseudo"] = row["pseudo1"] if "pseudo1" in row.keys() else None
+    main_d["asm"] = row["asm1"] if "asm1" in row.keys() else None
     main_d["pseudocode_primes"] = row["pseudo_primes1"]
     main_d["nodes"] = row["nodes1"]
     main_d["md_index"] = row["md1"]
-    main_d["clean_assembly"] = row["clean_assembly1"]
-    main_d["clean_pseudo"] = row["clean_pseudo1"]
-    main_d["clean_micro"] = row["clean_micro1"]
+    main_d["clean_assembly"] = row["clean_assembly1"] if "clean_assembly1" in row.keys() else None
+    main_d["clean_pseudo"] = row["clean_pseudo1"] if "clean_pseudo1" in row.keys() else None
+    main_d["clean_micro"] = row["clean_micro1"] if "clean_micro1" in row.keys() else None
     main_d["bytes_hash"] = row["bytes_hash1"]
     main_d["edges"] = row["edges1"]
     main_d["indegree"] = row["indegree1"]
@@ -2026,14 +2109,14 @@ class CBinDiff:
     diff_d = {}
     diff_d["ea"] = row["ea2"]
     diff_d["name"] = row["name2"]
-    diff_d["pseudo"] = row["pseudo2"]
-    diff_d["asm"] = row["asm2"]
+    diff_d["pseudo"] = row["pseudo2"] if "pseudo2" in row.keys() else None
+    diff_d["asm"] = row["asm2"] if "asm2" in row.keys() else None
     diff_d["pseudocode_primes"] = row["pseudo_primes2"]
     diff_d["nodes"] = row["nodes2"]
     diff_d["md_index"] = row["md2"]
-    diff_d["clean_assembly"] = row["clean_assembly2"]
-    diff_d["clean_pseudo"] = row["clean_pseudo2"]
-    diff_d["clean_micro"] = row["clean_micro2"]
+    diff_d["clean_assembly"] = row["clean_assembly2"] if "clean_assembly2" in row.keys() else None
+    diff_d["clean_pseudo"] = row["clean_pseudo2"] if "clean_pseudo2" in row.keys() else None
+    diff_d["clean_micro"] = row["clean_micro2"] if "clean_micro2" in row.keys() else None
     diff_d["bytes_hash"] = row["bytes_hash2"]
     diff_d["edges"] = row["edges2"]
     diff_d["indegree"] = row["indegree2"]
@@ -3443,7 +3526,9 @@ class CBinDiff:
     Find the 'bester' matches in the functions gap specified by the given ranges
     """
     cur = self.db_cursor()
-    sql = """select *
+    # Stage 1: Load only lightweight metadata (no assembly/pseudocode to save memory)
+    sql_metadata = """select id, name, address, nodes, edges, pseudocode_lines,
+                             bytes_hash, md_index
          from {db}.functions
         where address > ?
           and address < ?
@@ -3451,17 +3536,17 @@ class CBinDiff:
     try:
       heur_text = "Local affinity"
 
-      # First, retrieve the main database functions in that area...
-      cur.execute(sql.format(db="main"), range1)
-      # fetchall() already returns a list, no need to wrap in list()
+      # First, retrieve the main database functions metadata in that area...
+      cur.execute(sql_metadata.format(db="main"), range1)
+      # Load lightweight metadata only (KB not MB)
       main_rows = cur.fetchall()
       size = len(main_rows)
       # If the number of functions in that gap is less than a hardcoded size, do
       # continue...
       if size > 0 and size <= config.MAX_FUNCTIONS_PER_GAP:
-        # Then retrieve the diff database functions in that area...
-        cur.execute(sql.format(db="diff"), range2)
-        # fetchall() already returns a list, no need to wrap in list()
+        # Then retrieve the diff database functions metadata in that area...
+        cur.execute(sql_metadata.format(db="diff"), range2)
+        # Load lightweight metadata only (KB not MB)
         diff_rows = cur.fetchall()
         size = len(diff_rows)
         # Check again the same number of maximum hardcoded functions that we'll
@@ -3489,7 +3574,13 @@ class CBinDiff:
                 if pseudocode_lines1 == 3 or pseudocode_lines2 == 3:
                   continue
 
-              r = self.compare_function_rows(main_row, diff_row)
+              # Stage 2: Only now fetch full rows (assembly/pseudocode) for comparison
+              main_full = self.get_function_row_by_ea(main_row["address"], "main")
+              diff_full = self.get_function_row_by_ea(diff_row["address"], "diff")
+              if main_full is None or diff_full is None:
+                continue
+
+              r = self.compare_function_rows(main_full, diff_full)
               if r == 1.0:
                 chooser = "best"
               elif r >= config.DEFAULT_PARTIAL_RATIO:
@@ -3506,14 +3597,14 @@ class CBinDiff:
               if name2 in local_diff_matched and diff_score[name2] >= r:
                 continue
 
-              should_add, r = self.call_on_match_hook(r, main_row, diff_row)
+              should_add, r = self.call_on_match_hook(r, main_full, diff_full)
               if should_add:
-                ea1 = main_row["address"]
-                ea2 = diff_row["address"]
-                name1 = main_row["name"]
-                name2 = diff_row["name"]
-                nodes1 = int(main_row["nodes"])
-                nodes2 = int(diff_row["nodes"])
+                ea1 = main_full["address"]
+                ea2 = diff_full["address"]
+                name1 = main_full["name"]
+                name2 = diff_full["name"]
+                nodes1 = int(main_full["nodes"])
+                nodes2 = int(diff_full["nodes"])
                 new_item = [ ea1, name1, ea2, name2, heur_text, r, nodes1, nodes2 ]
                 self.add_match(name1, name2, r, new_item, chooser)
 
@@ -3782,7 +3873,7 @@ class CBinDiff:
     """
     Diff the current two databases (main and diff).
     """
-    self.ratios_cache = {}
+    self.ratios_cache = LRUCache(maxsize=50000)
     self.last_diff_db = db
     cur = self.db_cursor()
     self.try_attach(cur, db)
