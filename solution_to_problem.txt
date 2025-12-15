@@ -1,6 +1,0 @@
-⏺ FOUND IT! The heuristics are loading EVERYTHING:
-
-  Look at diaphora_heuristics.py lines 53-76 - SELECT_FIELDS includes:
-  - f.pseudocode pseudo1, df.pseudocode pseudo2
-  - f.assembly asm1, df.assembly asm2
-  - f.clean_assembly, f.clean_pseudo, f.clean_microcode
