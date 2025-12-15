@@ -5,7 +5,7 @@
 </p>
 
 Diaphora++ is a fork of Diaphora, the best IDA plugin for diffing binaries.
-Since 2024 Diaphora has not recieved any updates, and I found that it was lacking some featuers, so I took it upon myself
+Since 2024 Diaphora has not received any updates, and I found that it was lacking some features, so I took it upon myself
 to fork the project and add more stuff.
 ## Unique Features
 
