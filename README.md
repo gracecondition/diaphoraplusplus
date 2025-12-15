@@ -42,6 +42,7 @@ However, Diaphora has also many features that are unique, not available in any o
 - Better UI colors for dark mode
 - Search within diff in IDA.
 - cdifflib for faster diffing in python.
+- MCP/AI powered diff analysis
 
 ## Installation
 

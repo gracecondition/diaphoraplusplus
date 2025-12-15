@@ -299,6 +299,7 @@ class CChooser:
     self.cmd_show_pseudo = None
     self.cmd_highlight_functions = None
     self.cmd_unhighlight_functions = None
+    self.cmd_start_mcp_server = None
 
     self.selected_items = []
 
@@ -478,6 +479,9 @@ class CBinDiff:
     )
     self.use_decompiler = self.get_value_for(
       "use_decompiler", config.EXPORTING_USE_DECOMPILER
+    )
+    self.enable_ai_diffing = self.get_value_for(
+      "enable_ai_diffing", config.DIFFING_ENABLE_AI_ANALYSIS
     )
     self.project_script = self.get_value_for("project_script", None)
     self.hooks = None
@@ -782,7 +786,7 @@ class CBinDiff:
     if isinstance(prop, int) and (prop > 0xFFFFFFFF or prop < -0xFFFFFFFF):
       prop = str(prop)
     elif isinstance(prop, bytes):
-      prop = prop.encode("utf-8")
+      prop = prop.decode("utf-8")
     return prop
 
   def save_instructions_to_database(self, cur, bb_data, func_id):
@@ -2768,6 +2772,46 @@ class CBinDiff:
     finally:
       cur.close()
     return row
+
+  def generate_pseudo_diff_text(self, ea1, ea2):
+    """Generate unified diff text for pseudocode (copied from CIDABinDiff for MCP use)."""
+    cur = self.db_cursor()
+    try:
+      sql = """select *
+        from (
+        select prototype, pseudocode, name, 1
+         from functions
+        where address = ?
+          and pseudocode is not null
+    union
+       select prototype, pseudocode, name, 2
+         from diff.functions
+        where address = ?
+          and pseudocode is not null)
+        order by 4 asc"""
+      ea1_int = str(int(ea1, 16))
+      ea2_int = str(int(ea2, 16))
+      cur.execute(sql, (ea1_int, ea2_int))
+      rows = cur.fetchall()
+      if len(rows) != 2:
+        return None
+
+      row1 = rows[0]
+      row2 = rows[1]
+      buf1 = row1["prototype"] + "\n" + row1["pseudocode"]
+      buf2 = row2["prototype"] + "\n" + row2["pseudocode"]
+
+      if buf1 == buf2:
+        return None
+
+      uni_diff = unified_diff(
+        buf1.split("\n"), buf2.split("\n"), fromfile=row1["name"], tofile=row2["name"]
+      )
+      return "\n".join([line.rstrip("\n") for line in uni_diff])
+    except:
+      return None
+    finally:
+      cur.close()
 
   def compare_function_rows(self, main_row, diff_row):
     """

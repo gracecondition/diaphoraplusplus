@@ -19,9 +19,41 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import os
 import sys
 import configparser
+import threading
+import socket
 
 import idaapi
 from idaapi import warning
+import orjson as json
+
+#-------------------------------------------------------------------------------
+# Global MCP server instance
+_mcp_server = None
+_mcp_thread = None
+
+#-------------------------------------------------------------------------------
+def start_mcp_server(diaphora_path):
+  """Start MCP server in background thread."""
+  global _mcp_server, _mcp_thread
+
+  if _mcp_server is not None:
+    return  # Already running
+
+  try:
+    # Import MCP module
+    if diaphora_path not in sys.path:
+      sys.path.insert(0, diaphora_path)
+
+    from diaphora_mcp import DiaphoraMCPServer
+
+    # For now, create a placeholder server
+    # It will be initialized with actual bindiff instance when diff is run
+    _mcp_server = {"status": "initialized", "server": None}
+
+    print("[Diaphora MCP] Server initialized and ready")
+
+  except Exception as e:
+    print(f"[Diaphora MCP] Failed to initialize: {e}")
 
 #-------------------------------------------------------------------------------
 def resolve_diaphora():
@@ -46,6 +78,9 @@ def resolve_diaphora():
 
   if path not in sys.path:
     sys.path.insert(0, path)  # Prepend so Diaphora++ wins over other installs
+
+  # Start MCP server
+  start_mcp_server(path)
 
   from diaphora_ida import main
   return main

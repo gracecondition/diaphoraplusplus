@@ -779,6 +779,11 @@ class CIDAChooser(CDiaphoraChooser):
       self.AddCommand(None)
       self.cmd_highlight_functions = self.AddCommand("Highlight matches")
       self.cmd_unhighlight_functions = self.AddCommand("Unhighlight matches")
+      # Only show AI diffing button if enabled in settings
+      if hasattr(self.bindiff, 'enable_ai_diffing') and self.bindiff.enable_ai_diffing:
+        self.AddCommand(None)
+        self.cmd_start_mcp_server = self.AddCommand("Analyze patchdiffs with LLM...")
+        log("[Diaphora MCP] Button 'Analyze patchdiffs with LLM' added to menu")
     elif not self.show_commands and (self.cmd_show_asm is None or force):
       self.cmd_show_asm = self.AddCommand("Show assembly")
       self.cmd_show_pseudo = self.AddCommand("Show pseudo-code")
@@ -908,6 +913,8 @@ class CIDAChooser(CDiaphoraChooser):
       timeraction_t(self.bindiff.re_diff, None, 1000)
     elif cmd_id == self.cmd_diff_external:
       self.bindiff.diff_external(self.items[n])
+    elif hasattr(self, 'cmd_start_mcp_server') and cmd_id == self.cmd_start_mcp_server:
+      self.bindiff.start_mcp_for_llm_analysis(self.items[n])
 
     return True
 
@@ -1052,7 +1059,8 @@ class CBinDiffExporterSetup(Form):
   <Use speed ups:{rExperimental}##Use tricks to speed ups some of the most common diffing tasks>
   <#Enable this option to ignore sub_* names for the 'Same name' heuristic.#Ignore automatically generated names:{rIgnoreSubNames}>
   <#Enable this option to ignore all function names for the 'Same name' heuristic.#Ignore all function names:{rIgnoreAllNames}>
-  <#Enable this option to use the Machine Learning engine with an already trained model specified in diaphora_config.py!ML_TRAINED_MODEL.#Use an already trained model:{rUseTrainedModel}>{cGroup1}>
+  <#Enable this option to use the Machine Learning engine with an already trained model specified in diaphora_config.py!ML_TRAINED_MODEL.#Use an already trained model:{rUseTrainedModel}>
+  <#Enable AI-based diff analysis with Claude Desktop via MCP#Enable AI-based diff analysis:{rEnableAIDiffing}>{cGroup1}>
 
   Project specific rules:
   <#Select the project specific Python script rules#Python script:{iProjectSpecificRules}>
@@ -1082,7 +1090,8 @@ class CBinDiffExporterSetup(Form):
           "rExperimental",
           "rIgnoreSubNames",
           "rIgnoreAllNames",
-          "rUseTrainedModel"
+          "rUseTrainedModel",
+          "rEnableAIDiffing"
         )
       ),
       "iProjectSpecificRules": Form.FileInput(
@@ -1118,6 +1127,7 @@ class CBinDiffExporterSetup(Form):
     self.rIgnoreSmallFunctions.checked = opts.ignore_small_functions
     self.rFuncSummariesOnly.checked = opts.func_summaries_only
     self.rExportMicrocode.checked = opts.export_microcode
+    self.rEnableAIDiffing.checked = opts.enable_ai_diffing
 
   def get_options(self):
     """
@@ -1142,6 +1152,7 @@ class CBinDiffExporterSetup(Form):
       func_summaries_only=self.rFuncSummariesOnly.checked,
       project_script=self.iProjectSpecificRules.value,
       export_microcode=self.rExportMicrocode.checked,
+      enable_ai_diffing=self.rEnableAIDiffing.checked,
     )
     return BinDiffOptions(**opts)
 
@@ -2224,6 +2235,57 @@ class CIDABinDiff(diaphora.CBinDiff):
     set_dock_pos(title2, title1, DP_RIGHT)
     uitimercallback_t(g1, 100)
     uitimercallback_t(g2, 100)
+
+  def start_mcp_for_llm_analysis(self, item):
+    """
+    Load the pseudocode diff for this match and make it available to Claude via MCP.
+
+    Args:
+        item: The chooser item (function match row)
+    """
+    try:
+      from diaphora_mcp import set_current_diff
+
+      # Extract addresses and names from the item
+      ea1 = item[CHOOSER_ITEM_MAIN_EA]
+      ea2 = item[CHOOSER_ITEM_DIFF_EA]
+      name1 = item[CHOOSER_ITEM_MAIN_NAME]
+      name2 = item[CHOOSER_ITEM_DIFF_NAME]
+
+      # Generate the pseudocode diff
+      diff_text = self.generate_pseudo_diff_text(ea1, ea2, error_func=warning)
+
+      if not diff_text:
+        warning("Could not generate pseudocode diff for this match.\n"
+                "Make sure both functions have pseudocode available.")
+        return
+
+      # Prepare metadata
+      metadata = {
+        "main_address": ea1,
+        "main_name": name1,
+        "diff_address": ea2,
+        "diff_name": name2
+      }
+
+      # Save the diff for MCP server to read
+      if set_current_diff(diff_text, metadata):
+        # Show setup instructions (useful for first-time users)
+        from diaphora_mcp import show_mcp_setup_instructions
+        show_mcp_setup_instructions()
+
+        info(f"Pseudocode diff loaded for Claude analysis!\n\n"
+             f"Function: {name1} ({ea1}) vs {name2} ({ea2})\n\n"
+             f"Now in Claude Desktop, ask:\n"
+             f"  • 'Analyze the current diff for security issues'\n"
+             f"  • 'What changed in this function?'\n"
+             f"  • 'Show me the current diff'\n\n"
+             f"(See IDA console for MCP setup instructions if this is your first time)")
+      else:
+        warning("Failed to save diff for MCP analysis.")
+
+    except Exception as e:
+      warning(f"Failed to load diff for analysis: {e}")
 
   def import_instruction(self, ins_data1, ins_data2):
     """
@@ -4022,6 +4084,7 @@ def _diff_or_export(use_ui, **options):
     bd.ignore_small_functions = opts.ignore_small_functions
     bd.function_summaries_only = opts.func_summaries_only
     bd.export_microcode = opts.export_microcode
+    bd.enable_ai_diffing = opts.enable_ai_diffing
     bd.sql_max_processed_rows = config.SQL_MAX_PROCESSED_ROWS
     bd.timeout = config.SQL_TIMEOUT_LIMIT * max(total_functions / 20000, 1)
     bd.project_script = opts.project_script
@@ -4119,6 +4182,9 @@ class BinDiffOptions:
     )
     self.ignore_small_functions = kwargs.get(
       "ignore_small_functions", config.DIFFING_IGNORE_SMALL_FUNCTIONS
+    )
+    self.enable_ai_diffing = kwargs.get(
+      "enable_ai_diffing", config.DIFFING_ENABLE_AI_ANALYSIS
     )
 
     # Enable, by default, exporting only function summaries for huge dbs.
